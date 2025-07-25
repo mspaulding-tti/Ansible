@@ -1,6 +1,8 @@
 ---
 - name: Ensure faillock is enabled and configure PAM on Debian
   hosts: all
+  vars_files:
+    -debian12.yml
   become: true
   tasks:
 
