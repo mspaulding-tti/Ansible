@@ -1,0 +1,5 @@
+ansible_user: tti-admin  # Common if applicable, or per-host
+ansible_ssh_private_key_file: /home/aapuser/access/yt-stream-checker003_tti-admin_sshkey.pem
+ansible_become: yes
+ansible_become_method: sudo
+ansible_become_password: "G!@eWuufoVLe*sJW49L.28foi"
