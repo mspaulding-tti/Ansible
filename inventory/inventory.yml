@@ -7,7 +7,7 @@ all:
           ansible_host: 20.225.85.136
         yt-streamchecker-04:
           ansible_host: 13.84.129.137
-    ubuntu-pre24:
+    ubuntu_pre24:
       hosts:
         qbot-001:
           ansible_host: 20.225.244.230
