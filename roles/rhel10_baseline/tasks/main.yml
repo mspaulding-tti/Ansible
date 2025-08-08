@@ -1,0 +1,27 @@
+---
+
+name: Select authselect profile with faillock and pwhistory
+ansible.builtin.command: authselect select local with-faillock with-pwhistory --force
+changed_when: false
+
+name: Copy pwquality.conf
+ansible.builtin.copy:
+src: pwquality.conf
+dest: /etc/security/pwquality.conf
+mode: '0644'
+
+name: Copy faillock.conf
+ansible.builtin.copy:
+src: faillock.conf
+dest: /etc/security/faillock.conf
+mode: '0644'
+
+name: Copy pwhistory.conf
+ansible.builtin.copy:
+src: pwhistory.conf
+dest: /etc/security/pwhistory.conf
+mode: '0644'
+
+name: Apply authselect changes
+ansible.builtin.command: authselect apply-changes
+changed_when: false
