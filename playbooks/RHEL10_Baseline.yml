@@ -33,7 +33,7 @@
         line: '{{ item.key }} = {{ item.value }}'
         create: yes
       loop:
-        - { key: 'minlen', value: '12' }
+        - { key: 'minlen', value: '16' }
         - { key: 'dcredit', value: '-1' }
         - { key: 'ucredit', value: '-1' }
         - { key: 'lcredit', value: '-1' }
