@@ -1,0 +1,50 @@
+---
+- name: Configure password policy on RHEL 10
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create custom authselect profile with faillock
+      ansible.builtin.command: authselect create-profile custom -b sssd with-faillock --force
+      changed_when: false
+
+    - name: Add pam_pwhistory to password-auth
+      ansible.builtin.lineinfile:
+        path: /etc/authselect/custom/custom/password-auth
+        insertafter: '^password\s+requisite\s+pam_pwquality\.so'
+        line: 'password requisite pam_pwhistory.so use_authtok remember=24 enforce_for_root'
+
+    - name: Add pam_pwhistory to system-auth
+      ansible.builtin.lineinfile:
+        path: /etc/authselect/custom/custom/system-auth
+        insertafter: '^password\s+requisite\s+pam_pwquality\.so'
+        line: 'password requisite pam_pwhistory.so use_authtok remember=24 enforce_for_root'
+
+    - name: Select the custom authselect profile
+      ansible.builtin.command: authselect select custom --force
+
+    - name: Apply authselect changes
+      ansible.builtin.command: authselect apply-changes
+      changed_when: false
+
+    - name: Configure pwquality.conf
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwquality.conf
+        regexp: '^\s*{{ item.key }}\s*='
+        line: '{{ item.key }} = {{ item.value }}'
+        create: yes
+      loop:
+        - { key: 'minlen', value: '12' }
+        - { key: 'dcredit', value: '-1' }
+        - { key: 'ucredit', value: '-1' }
+        - { key: 'lcredit', value: '-1' }
+        - { key: 'ocredit', value: '-1' }
+
+    - name: Configure faillock.conf
+      ansible.builtin.lineinfile:
+        path: /etc/security/faillock.conf
+        regexp: '^\s*{{ item.key }}\s*='
+        line: '{{ item.key }} = {{ item.value }}'
+        create: yes
+      loop:
+        - { key: 'deny', value: '5' }
+        - { key: 'unlock_time', value: '900' }
