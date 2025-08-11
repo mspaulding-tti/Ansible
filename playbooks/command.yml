@@ -4,7 +4,7 @@
   become: true  # Run as root
   tasks:
     - name: Run authselect select local
-      command: authselect select local --with-pwhistory --with-pwquality # Use 'shell' module if needed
+      command: authselect select local --with-pwhistory --with-faillock # Use 'shell' module if needed
       register: result  # Optional: Store output in a variable
 
     - name: Display output
