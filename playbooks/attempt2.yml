@@ -8,8 +8,8 @@
       vars:
         authselect_profile: local
         authselect_features:
-          - faillock
-          - pwhistory
+          - --with-faillock
+          - --with-pwhistory
 
   tasks:
     - name: Copy faillock.conf
