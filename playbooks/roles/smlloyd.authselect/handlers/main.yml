@@ -1,9 +1,0 @@
----
-
-- name: Update PAM with authselect
-  command: >-
-    authselect select {{ authselect_profile }}
-    {{ authselect_features | join(' ') }}
-    {% if authselect_force %}--force{% endif %}
-
-...
