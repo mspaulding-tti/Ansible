@@ -1,0 +1,5 @@
+---
+
+__authselect_user_nsswitch_conf_file: /etc/authselect/user-nsswitch.conf
+
+...
