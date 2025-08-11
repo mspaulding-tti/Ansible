@@ -13,5 +13,11 @@
 
     - name: Run authselect apply-changes
       command: authselect apply-changes  # Use 'shell' module if needed
-      register: result  # Optional: Store output in a variable
+      register: result1  # Optional: Store output in a variable
+
+    - name: Display output
+      debug:
+        msg: "{{ result1.stdout }}"  # Optional: Print the result
+
+
 
