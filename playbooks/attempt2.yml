@@ -6,7 +6,7 @@
   roles:
     - role: smlloyd.authselect
       vars:
-        authselect_profile: custom/local
+        authselect_profile: local
         authselect_features:
           - faillock
           - pwhistory
