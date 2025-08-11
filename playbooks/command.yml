@@ -4,9 +4,14 @@
   become: true  # Run as root
   tasks:
     - name: Run authselect select local
-      command: authselect select local  # Use 'shell' module if needed
+      command: authselect select local --with-pwhistory --with-pwquality # Use 'shell' module if needed
       register: result  # Optional: Store output in a variable
 
     - name: Display output
       debug:
         msg: "{{ result.stdout }}"  # Optional: Print the result
+
+    - name: Run authselect apply-changes
+      command: authselect apply-changes  # Use 'shell' module if needed
+      register: result  # Optional: Store output in a variable
+
