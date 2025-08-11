@@ -1,0 +1,12 @@
+---
+- name: Execute command on Linux hosts
+  hosts: linux_servers  # Replace with your host/group
+  become: true  # Run as root
+  tasks:
+    - name: Run authselect list
+      command: authselect list  # Use 'shell' module if needed
+      register: result  # Optional: Store output in a variable
+
+    - name: Display output
+      debug:
+        msg: "{{ result.stdout }}"  # Optional: Print the result
