@@ -3,16 +3,6 @@
   hosts: all  # Adjust this to target specific hosts or groups as needed
   become: true  # Required for system configuration changes
 
-  pre_tasks:
-    - name: Check if local profile exists
-      ansible.builtin.command: authselect list
-      register: authselect_profiles
-      changed_when: false
-
-    - name: Create local profile if not exists
-      ansible.builtin.command: authselect create-profile local -b sssd --symlink-meta --symlink-pam
-      when: "'local' not in authselect_profiles.stdout"
-
   roles:
     - role: smlloyd.authselect
       vars:

@@ -1,6 +1,6 @@
 ---
 - name: Execute command on Linux hosts
-  hosts: linux_servers  # Replace with your host/group
+  hosts: all  # Replace with your host/group
   become: true  # Run as root
   tasks:
     - name: Run authselect list
