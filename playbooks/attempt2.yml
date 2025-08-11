@@ -8,8 +8,8 @@
       vars:
         authselect_profile: sssd
         authselect_features:
-          - --with-faillock
-          - --with-pwhistory
+          - with-faillock
+          - with-pwhistory
 
   tasks:
     - name: Copy faillock.conf
