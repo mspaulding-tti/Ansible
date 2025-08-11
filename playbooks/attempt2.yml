@@ -1,0 +1,47 @@
+---
+- name: Configure authselect with local profile and specified features
+  hosts: all  # Adjust this to target specific hosts or groups as needed
+  become: true  # Required for system configuration changes
+
+  pre_tasks:
+    - name: Check if local profile exists
+      ansible.builtin.command: authselect list
+      register: authselect_profiles
+      changed_when: false
+
+    - name: Create local profile if not exists
+      ansible.builtin.command: authselect create-profile local -b sssd --symlink-meta --symlink-pam
+      when: "'local' not in authselect_profiles.stdout"
+
+  roles:
+    - role: smlloyd.authselect
+      vars:
+        authselect_profile: custom/local
+        authselect_features:
+          - faillock
+          - pwhistory
+
+  tasks:
+    - name: Copy faillock.conf
+      ansible.builtin.copy:
+        src: faillock.conf
+        dest: /etc/security/faillock.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy pwhistory.conf
+      ansible.builtin.copy:
+        src: pwhistory.conf
+        dest: /etc/security/pwhistory.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy pwquality.conf
+      ansible.builtin.copy:
+        src: pwquality.conf
+        dest: /etc/security/pwquality.conf
+        owner: root
+        group: root
+        mode: '0644'
