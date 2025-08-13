@@ -1,3 +1,4 @@
+---
 - name: Insert pam_faillock preauth rule
   community.general.pamd:
     name: common-auth
