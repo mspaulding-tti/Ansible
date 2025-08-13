@@ -50,12 +50,12 @@
         module_arguments: "authfail deny={{ faillock_deny }} unlock_time={{ faillock_unlock_time }}"
         state: after
 
-    - name: Insert pam_faillock authsucc after authfail  # Corrected placement
+    - name: Insert pam_faillock authsucc before pam_deny  # Corrected placement
       community.general.pamd:
         name: common-auth
         type: auth
         control: "[default=die]"  # Match actual control
-        module_path: faillock.so
+        module_path: pam_faillock.so
         new_type: auth
         new_control: "sufficient"
         new_module_path: pam_faillock.so
