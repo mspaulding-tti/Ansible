@@ -1,6 +1,6 @@
 ---
 - name: Configure password policy on RHEL 10
   hosts: all
-  become: yes
+  become: true
   roles:
     - rhel10_baseline
