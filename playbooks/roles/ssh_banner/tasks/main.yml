@@ -42,3 +42,9 @@
     name: ssh
     state: restarted
   when: sshd_config_copy.changed and ansible_distribution in ['Ubuntu', 'Debian']  # Adjust based on your distros
+
+- name: Restart ssh service
+  service:
+    name: sshd
+    state: restarted
+  when: sshd_config_copy.changed and ansible_distribution in ['rhel']  # Adjust based on your distros
