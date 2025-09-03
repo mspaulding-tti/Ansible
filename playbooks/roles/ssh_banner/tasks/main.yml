@@ -35,9 +35,10 @@
     group: root
     mode: '0600'
     backup: yes  # Already present: Backs up the existing sshd_config before overwriting
+    validate: /usr/sbin/ssh -t -f %s  # Optional: Validate sshd_config before copying
 
-- name: Restart sshd service
+- name: Restart ssh service
   service:
-    name: sshd
+    name: ssh
     state: restarted
   when: ansible_distribution in ['CentOS', 'RedHat', 'Fedora', 'Ubuntu', 'Debian']  # Adjust based on your distros
