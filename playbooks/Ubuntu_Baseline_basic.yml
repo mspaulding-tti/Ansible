@@ -6,3 +6,4 @@
     - password_basic
     - session_timeout
     - ssh_banner
+    - tls_ciphers

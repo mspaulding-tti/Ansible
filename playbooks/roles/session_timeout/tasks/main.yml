@@ -1,6 +1,6 @@
 ---
 
-- name: Copy issue.net file
+- name: Copy 99-session-timeout.sh file
   copy:
     src: 99-session-timeout.sh
     dest: /etc/profile.d/99-session-timeout.sh

@@ -1,0 +1,10 @@
+---
+
+- name: Copy openssl.cnf file
+  copy:
+    src: openssl.cnf
+    dest: /etc/ssl/openssl.cnf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes  # Added to back up the existing /etc/ssl/openssl.cnf before overwriting
