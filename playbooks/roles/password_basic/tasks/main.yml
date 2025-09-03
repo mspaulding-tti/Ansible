@@ -1,7 +1,9 @@
 ---
 - name: Ensure libpam-modules is installed (contains pam_faillock)
   apt:
-    name: libpam-modules
+    name: 
+      - libpam-modules
+      - libpam-pwquality
     state: present
     update_cache: yes
 
