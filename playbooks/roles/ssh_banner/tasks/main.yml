@@ -8,6 +8,7 @@
     owner: root
     group: root
     mode: '0644'
+    backup: yes  # Added to back up the existing /etc/issue before overwriting
 
 - name: Copy issue.net file
   copy:
@@ -16,6 +17,7 @@
     owner: root
     group: root
     mode: '0644'
+    backup: yes  # Added to back up the existing /etc/issue.net before overwriting
 
 - name: Copy ssh_banner file
   copy:
@@ -32,6 +34,7 @@
     owner: root
     group: root
     mode: '0600'
+    backup: yes  # Already present: Backs up the existing sshd_config before overwriting
     validate: /usr/sbin/sshd -t -f %s  # Optional: Validate sshd_config before copying
 
 - name: Restart sshd service
