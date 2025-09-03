@@ -1,7 +1,9 @@
 ---
-- name: Ensure libpam-modules is installed (contains pam_faillock)
+- name: Ensure required PAM packages are installed
   apt:
-    name: libpam-modules
+    name:
+      - libpam-modules
+      - libpam-pwquality
     state: present
     update_cache: yes
 
@@ -12,6 +14,9 @@
     remote_src: yes
     backup: yes
 
+- name: Remove immutable attribute from /etc/pam.d/common-auth
+  command: chattr -i /etc/pam.d/common-auth
+
 - name: Set custom PAM configuration for faillock in /etc/pam.d/common-auth
   copy:
     src: common-auth
@@ -20,12 +25,18 @@
     group: root
     mode: '0644'
 
+- name: Set immutable attribute on /etc/pam.d/common-auth
+  command: chattr +i /etc/pam.d/common-auth
+
 - name: Backup existing /etc/pam.d/common-account
   copy:
     src: /etc/pam.d/common-account
     dest: /etc/pam.d/common-account.bak
     remote_src: yes
     backup: yes
+
+- name: Remove immutable attribute from /etc/pam.d/common-account
+  command: chattr -i /etc/pam.d/common-account
 
 - name: Set custom PAM configuration for faillock in /etc/pam.d/common-account
   copy:
@@ -35,12 +46,39 @@
     group: root
     mode: '0644'
 
+- name: Set immutable attribute on /etc/pam.d/common-account
+  command: chattr +i /etc/pam.d/common-account
+
+- name: Backup existing /etc/pam.d/common-password
+  copy:
+    src: /etc/pam.d/common-password
+    dest: /etc/pam.d/common-password.bak
+    remote_src: yes
+    backup: yes
+
+- name: Remove immutable attribute from /etc/pam.d/common-password
+  command: chattr -i /etc/pam.d/common-password
+
+- name: Set custom PAM configuration in /etc/pam.d/common-password
+  copy:
+    src: common-password
+    dest: /etc/pam.d/common-password
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Set immutable attribute on /etc/pam.d/common-password
+  command: chattr +i /etc/pam.d/common-password
+
 - name: Backup existing /etc/security/faillock.conf
   copy:
     src: /etc/security/faillock.conf
     dest: /etc/security/faillock.conf.bak
     remote_src: yes
     backup: yes
+
+- name: Remove immutable attribute from /etc/security/faillock.conf
+  command: chattr -i /etc/security/faillock.conf
 
 - name: Set custom PAM configuration for faillock in /etc/security/faillock.conf
   copy:
@@ -49,3 +87,52 @@
     owner: root
     group: root
     mode: '0644'
+
+- name: Set immutable attribute on /etc/security/faillock.conf
+  command: chattr +i /etc/security/faillock.conf
+
+- name: Backup existing /etc/security/pwhistory.conf
+  copy:
+    src: /etc/security/pwhistory.conf
+    dest: /etc/security/pwhistory.conf.bak
+    remote_src: yes
+    backup: yes
+  when: ansible_distribution == "Ubuntu"
+
+- name: Remove immutable attribute from /etc/security/pwhistory.conf
+  command: chattr -i /etc/security/pwhistory.conf
+  when: ansible_distribution == "Ubuntu"
+
+- name: Set custom PAM configuration for pwhistory in /etc/security/pwhistory.conf
+  copy:
+    src: pwhistory.conf
+    dest: /etc/security/pwhistory.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_distribution == "Ubuntu"
+
+- name: Set immutable attribute on /etc/security/pwhistory.conf
+  command: chattr +i /etc/security/pwhistory.conf
+  when: ansible_distribution == "Ubuntu"
+
+- name: Backup existing /etc/security/pwquality.conf
+  copy:
+    src: /etc/security/pwquality.conf
+    dest: /etc/security/pwquality.conf.bak
+    remote_src: yes
+    backup: yes
+
+- name: Remove immutable attribute from /etc/security/pwquality.conf
+  command: chattr -i /etc/security/pwquality.conf
+
+- name: Set custom PAM configuration for pwquality in /etc/security/pwquality.conf
+  copy:
+    src: pwquality.conf
+    dest: /etc/security/pwquality.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Set immutable attribute on /etc/security/pwquality.conf
+  command: chattr +i /etc/security/pwquality.conf
