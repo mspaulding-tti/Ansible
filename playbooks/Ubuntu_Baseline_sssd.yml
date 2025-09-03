@@ -1,6 +1,6 @@
 ---
-- name: ensure pam_faillock on system wi SSSD authentication enabled
+- name: Configure baseline policy on Ubuntu with PAM Authentication and SSSD
   hosts: all
   become: true
   roles:
-    - faillock_sssd
+    - rhel10_baseline

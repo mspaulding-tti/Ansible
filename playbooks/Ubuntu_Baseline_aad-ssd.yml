@@ -1,0 +1,7 @@
+---
+- name: Configure baseline policy on Ubuntu with PAM Authentication, SSSD, and Azure Active Directory (Entra ID)
+  hosts: all
+  become: true
+  roles:
+    - password_aad
+    - session_timeout

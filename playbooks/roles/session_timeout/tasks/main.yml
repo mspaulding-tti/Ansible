@@ -1,0 +1,10 @@
+---
+
+- name: Copy issue.net file
+  copy:
+    src: 99-session-timeout.sh
+    dest: /etc/profile.d/99-session-timeout.sh
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes  # Added to back up the existing /etc/profile.d/99-session-timeout.sh before overwriting
