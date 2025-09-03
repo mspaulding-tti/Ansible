@@ -35,9 +35,10 @@
     group: root
     mode: '0600'
     backup: yes  # Already present: Backs up the existing sshd_config before overwriting
+  register: sshd_config_copy
 
 - name: Restart ssh service
   service:
     name: ssh
     state: restarted
-  when: ansible_distribution in ['Ubuntu', 'Debian']  # Adjust based on your distros
+  when: sshd_config_copy.changed and ansible_distribution in ['Ubuntu', 'Debian']  # Adjust based on your distros

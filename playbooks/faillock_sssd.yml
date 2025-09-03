@@ -1,6 +1,0 @@
----
-- name: ensure pam_faillock on system wi SSSD authentication enabled
-  hosts: all
-  become: true
-  roles:
-    - faillock_sssd
