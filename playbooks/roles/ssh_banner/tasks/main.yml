@@ -35,7 +35,6 @@
     group: root
     mode: '0600'
     backup: yes  # Already present: Backs up the existing sshd_config before overwriting
-    validate: /usr/sbin/ssh -t -f %s  # Optional: Validate sshd_config before copying
 
 - name: Restart ssh service
   service:
