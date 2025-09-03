@@ -5,3 +5,4 @@
   roles:
     - password_aad
     - session_timeout
+    - ssh_banner
