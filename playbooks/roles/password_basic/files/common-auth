@@ -18,7 +18,7 @@
 auth       required pam_faillock.so preauth audit deny=5 unlock_time=900
 auth       [success=1 default=ignore] pam_unix.so nullok
 auth       [default=die] pam_faillock.so authfail audit deny=5 unlock_time=900
-auth       required pam_faillock.so authsucc audit deny=5 unlock_time=900
+auth       sufficient pam_faillock.so authsucc audit deny=5 unlock_time=900
 # here's the fallback if no module succeeds
 auth       requisite pam_deny.so
 # prime the stack with a positive return value if there isn't one already;
