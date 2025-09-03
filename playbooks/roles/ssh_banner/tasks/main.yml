@@ -41,4 +41,4 @@
   service:
     name: ssh
     state: restarted
-  when: ansible_distribution in ['CentOS', 'RedHat', 'Fedora', 'Ubuntu', 'Debian']  # Adjust based on your distros
+  when: ansible_distribution in ['Ubuntu', 'Debian']  # Adjust based on your distros
