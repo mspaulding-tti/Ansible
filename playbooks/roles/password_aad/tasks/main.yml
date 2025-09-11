@@ -4,6 +4,8 @@
     name:
       - libpam-modules
       - libpam-pwquality
+      - aadsshlogin
+      - aadsshlogin-selinux
     state: present
     update_cache: yes
 
