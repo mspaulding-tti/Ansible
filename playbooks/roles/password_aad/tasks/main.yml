@@ -4,6 +4,7 @@
     name:
       - libpam-modules
       - libpam-pwquality
+      - libpam-aad
     state: present
     update_cache: yes
 
