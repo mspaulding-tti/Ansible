@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: elastic_agent
+  author: Michael Spaulding
+  description: Install Elastic Agent and enroll into Fleet
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: EL
+      versions: ["8"]
+    - name: Ubuntu
+      versions: ["focal", "jammy", "noble"]
+    - name: Debian
+      versions: ["bullseye", "bookworm"]
+dependencies: []

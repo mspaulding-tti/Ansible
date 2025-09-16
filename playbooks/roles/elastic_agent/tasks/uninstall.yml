@@ -1,0 +1,18 @@
+---
+- name: Stop elastic-agent service if present
+  systemd:
+    name: elastic-agent
+    state: stopped
+  ignore_errors: true
+
+- name: Attempt uninstall via /usr/bin/elastic-agent
+  command: /usr/bin/elastic-agent uninstall -f
+  register: uninstall_usrbin
+  failed_when: false
+  changed_when: uninstall_usrbin.rc == 0
+
+- name: Attempt uninstall via /opt/Elastic/Agent/elastic-agent (fallback)
+  command: /opt/Elastic/Agent/elastic-agent uninstall -f
+  register: uninstall_opt
+  failed_when: false
+  changed_when: uninstall_opt.rc == 0

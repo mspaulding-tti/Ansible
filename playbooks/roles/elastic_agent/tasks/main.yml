@@ -1,0 +1,118 @@
+---
+- name: Guard - only Linux is supported
+  assert:
+    that:
+      - ansible_system | lower == 'linux'
+    fail_msg: "This role supports Linux hosts only."
+
+- name: Require enrollment_token
+  assert:
+    that:
+      - enrollment_token is defined
+      - (enrollment_token | length) > 0
+    fail_msg: "You must provide enrollment_token (via --extra-vars, Vault, or AAP Survey)."
+
+- name: Determine architecture mapping
+  set_fact:
+    ea_arch_raw: "{{ ansible_architecture }}"
+    ea_arch: >-
+      {% if ansible_architecture in ['x86_64','amd64'] %}x86_64
+      {% elif ansible_architecture in ['aarch64','arm64'] %}arm64
+      {% else %}unsupported{% endif %}
+    ea_os: "{{ ansible_system | lower }}"
+
+- name: Fail on unsupported architecture
+  fail:
+    msg: "Unsupported architecture: {{ ea_arch_raw }}"
+  when: ea_arch == 'unsupported'
+
+- name: Fetch desired Elastic Agent version from URL
+  uri:
+    url: "{{ version_source_url }}"
+    method: GET
+    return_content: true
+    status_code: 200
+    timeout: 30
+    validate_certs: yes
+  register: version_resp
+
+- name: Set version to install (use override if provided)
+  set_fact:
+    elastic_agent_version: "{{ version_override | default(version_resp.content | trim) }}"
+
+- name: Compute artifact names and URLs
+  set_fact:
+    ea_filename: "elastic-agent-{{ elastic_agent_version }}-{{ ea_os }}-{{ ea_arch }}"
+    ea_tarball: "{{ work_dir }}/{{ ea_filename }}.tar.gz"
+    ea_url: "https://artifacts.elastic.co/downloads/beats/elastic-agent/{{ ea_filename }}.tar.gz"
+
+- name: Gather service facts
+  service_facts:
+
+- name: Fail if Elastic Agent service is running (set force_install=true to override)
+  fail:
+    msg: "Elastic Agent appears to be running. Uninstall first or set force_install=true."
+  when:
+    - "'elastic-agent.service' in ansible_facts.services"
+    - ansible_facts.services['elastic-agent.service'].state == 'running'
+    - not force_install
+
+- name: Optional - stop/uninstall when force_install=true
+  include_tasks: uninstall.yml
+  when: force_install
+
+- name: Ensure temp dir exists
+  file:
+    path: "{{ work_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Download Elastic Agent tarball
+  get_url:
+    url: "{{ ea_url }}"
+    dest: "{{ ea_tarball }}"
+    mode: '0644'
+    force: true
+    timeout: 60
+    validate_certs: yes
+
+- name: Remove any previous extracted directory
+  file:
+    path: "{{ work_dir }}/{{ ea_filename }}"
+    state: absent
+
+- name: Extract Elastic Agent
+  unarchive:
+    src: "{{ ea_tarball }}"
+    dest: "{{ work_dir }}"
+    remote_src: true
+
+- name: Ensure elastic-agent binary is executable
+  file:
+    path: "{{ work_dir }}/{{ ea_filename }}/elastic-agent }}"
+    mode: '0755'
+    state: file
+
+- name: Install Elastic Agent
+  block:
+    - name: Install into Fleet
+      command: >
+        ./elastic-agent install
+        --url={{ fleet_url }}
+        --force
+        --non-interactive
+        --enrollment-token={{ enrollment_token }}
+        {% if agent_tags is defined and agent_tags|length > 0 %}--tag="{{ agent_tags }}"{% endif %}
+      args:
+        chdir: "{{ work_dir }}/{{ ea_filename }}"
+        creates: "/opt/Elastic/Agent/elastic-agent"
+      register: install_cmd
+  always:
+    - name: Cleanup extracted directory
+      file:
+        path: "{{ work_dir }}/{{ ea_filename }}"
+        state: absent
+    - name: Cleanup tarball
+      file:
+        path: "{{ ea_tarball }}"
+        state: absent
