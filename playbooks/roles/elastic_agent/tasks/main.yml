@@ -12,20 +12,6 @@
       - (enrollment_token | length) > 0
     fail_msg: "You must provide enrollment_token (via --extra-vars, Vault, or AAP Survey)."
 
-- name: Determine architecture mapping
-  set_fact:
-    ea_arch_raw: "{{ ansible_architecture }}"
-    ea_arch: >-
-      {% if ansible_architecture in ['x86_64','amd64'] %}x86_64
-      {% elif ansible_architecture in ['aarch64','arm64'] %}arm64
-      {% else %}unsupported{% endif %}
-    ea_os: "{{ ansible_system | lower }}"
-
-- name: Fail on unsupported architecture
-  fail:
-    msg: "Unsupported architecture: {{ ea_arch_raw }}"
-  when: ea_arch == 'unsupported'
-
 - name: Fetch desired Elastic Agent version from URL
   uri:
     url: "{{ version_source_url }}"
@@ -40,14 +26,10 @@
   set_fact:
     elastic_agent_version: "{{ version_override | default(version_resp.content | trim) }}"
 
-- name: Compute artifact filename
-  set_fact:
-    ea_filename: "elastic-agent-{{ elastic_agent_version }}-{{ ea_os }}-{{ ea_arch }}"
-
 - name: Compute artifact paths and URLs
   set_fact:
     ea_tarball: "{{ work_dir }}/{{ ea_filename }}.tar.gz"
-    ea_url: "https://artifacts.elastic.co/downloads/beats/elastic-agent/{{ ea_filename }}.tar.gz"
+    ea_url: "https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{ elastic_agent_version }}-linux-x86_64.tar.gz"
 
 - name: Gather service facts
   service_facts:
