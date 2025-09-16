@@ -1,10 +1,5 @@
----
-- name: Guard - only Linux is supported
-  assert:
-    that:
-      - ansible_system | lower == 'linux'
-    fail_msg: "This role supports Linux hosts only."
 
+---
 - name: Require enrollment_token
   assert:
     that:
@@ -12,6 +7,32 @@
       - (enrollment_token | length) > 0
     fail_msg: "You must provide enrollment_token (via --extra-vars, Vault, or AAP Survey)."
 
+- name: Set OS/arch facts (x86_64 only)
+  set_fact:
+    ea_arch_raw: "{{ ansible_architecture }}"
+    ea_arch: "x86_64"
+    ea_os: "{{ ansible_system | lower | trim }}"
+
+# --- Skip-if-running logic ---
+- name: Gather service facts early
+  service_facts:
+
+- name: Determine if Elastic Agent is already running
+  set_fact:
+    agent_running: >-
+      {{
+        ('elastic-agent.service' in ansible_facts.services)
+        and (ansible_facts.services['elastic-agent.service'].state == 'running')
+      }}
+
+- name: Skip install - Elastic Agent already running (one-time installer policy)
+  debug:
+    msg: "Elastic Agent service is running; skipping installation (set force_install=true to reinstall)."
+  when:
+    - agent_running
+    - not force_install
+
+# --- Only proceed with install path if NOT running or if we are forcing reinstall ---
 - name: Fetch desired Elastic Agent version from URL
   uri:
     url: "{{ version_source_url }}"
@@ -21,30 +42,42 @@
     timeout: 30
     validate_certs: yes
   register: version_resp
+  when:
+    - force_install or not agent_running
 
-- name: Set version to install (use override if provided)
+- name: Choose raw version (override or fetched)
   set_fact:
-    elastic_agent_version: "{{ version_override | default(version_resp.content | trim) }}"
+    elastic_agent_version_raw: "{{ version_override | default(version_resp.content | default('')) }}"
+  when:
+    - force_install or not agent_running
+
+- name: Sanitize version string (strip CR/LF and surrounding whitespace)
+  set_fact:
+    elastic_agent_version: "{{ elastic_agent_version_raw | regex_replace('\r|\n', '') | trim }}"
+  when:
+    - force_install or not agent_running
+
+- name: Assert sanitized version looks valid (no spaces)
+  assert:
+    that:
+      - "' ' not in elastic_agent_version"
+      - elastic_agent_version | length > 0
+    fail_msg: "Elastic Agent version contains spaces or is empty. Check version_source_url or set version_override."
+  when:
+    - force_install or not agent_running
 
 - name: Compute artifact filename
   set_fact:
-    ea_filename: "elastic-agent-{{ elastic_agent_version }}-linux-x86_64"
+    ea_filename: "elastic-agent-{{ elastic_agent_version }}-{{ ea_os }}-{{ ea_arch }}"
+  when:
+    - force_install or not agent_running
 
 - name: Compute artifact paths and URLs
   set_fact:
     ea_tarball: "{{ work_dir }}/{{ ea_filename }}.tar.gz"
     ea_url: "https://artifacts.elastic.co/downloads/beats/elastic-agent/{{ ea_filename }}.tar.gz"
-
-- name: Gather service facts
-  service_facts:
-
-- name: Fail if Elastic Agent service is running (set force_install=true to override)
-  fail:
-    msg: "Elastic Agent appears to be running. Uninstall first or set force_install=true."
   when:
-    - "'elastic-agent.service' in ansible_facts.services"
-    - ansible_facts.services['elastic-agent.service'].state == 'running'
-    - not force_install
+    - force_install or not agent_running
 
 - name: Optional - stop/uninstall when force_install=true
   include_tasks: uninstall.yml
@@ -55,6 +88,8 @@
     path: "{{ work_dir }}"
     state: directory
     mode: '0755'
+  when:
+    - force_install or not agent_running
 
 - name: Download Elastic Agent tarball
   get_url:
@@ -64,23 +99,31 @@
     force: true
     timeout: 60
     validate_certs: yes
+  when:
+    - force_install or not agent_running
 
 - name: Remove any previous extracted directory
   file:
     path: "{{ work_dir }}/{{ ea_filename }}"
     state: absent
+  when:
+    - force_install or not agent_running
 
 - name: Extract Elastic Agent
   unarchive:
     src: "{{ ea_tarball }}"
     dest: "{{ work_dir }}"
     remote_src: true
+  when:
+    - force_install or not agent_running
 
-# - name: Ensure elastic-agent binary is executable
-#   file:
-#     path: "{{ work_dir }}/{{ ea_filename }}/elastic-agent }}"
-#     mode: '0755'
-#     state: link
+- name: Ensure elastic-agent binary is executable
+  file:
+    path: "{{ work_dir }}/{{ ea_filename }}/elastic-agent"
+    mode: '0755'
+    state: file
+  when:
+    - force_install or not agent_running
 
 - name: Install Elastic Agent
   block:
@@ -105,3 +148,5 @@
       file:
         path: "{{ ea_tarball }}"
         state: absent
+  when:
+    - force_install or not agent_running
