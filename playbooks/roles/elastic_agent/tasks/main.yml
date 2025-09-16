@@ -76,11 +76,11 @@
     dest: "{{ work_dir }}"
     remote_src: true
 
-- name: Ensure elastic-agent binary is executable
-  file:
-    path: "{{ work_dir }}/{{ ea_filename }}/elastic-agent }}"
-    mode: '0755'
-    state: file
+# - name: Ensure elastic-agent binary is executable
+#   file:
+#     path: "{{ work_dir }}/{{ ea_filename }}/elastic-agent }}"
+#     mode: '0755'
+#     state: link
 
 - name: Install Elastic Agent
   block:
