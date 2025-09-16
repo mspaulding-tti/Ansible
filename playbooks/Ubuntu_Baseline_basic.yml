@@ -7,3 +7,4 @@
     - session_timeout
     - ssh_banner
     - tls_ciphers
+    - elastic_agent
