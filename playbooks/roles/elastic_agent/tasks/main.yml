@@ -1,11 +1,11 @@
 
 ---
-- name: Require enrollment_token
-  assert:
-    that:
-      - enrollment_token is defined
-      - (enrollment_token | length) > 0
-    fail_msg: "You must provide enrollment_token (via --extra-vars, Vault, or AAP Survey)."
+# - name: Require enrollment_token
+#   assert:
+#     that:
+#       - enrollment_token is defined
+#       - (enrollment_token | length) > 0
+#     fail_msg: "You must provide enrollment_token (via --extra-vars, Vault, or AAP Survey)."
 
 - name: Set OS/arch facts (x86_64 only)
   set_fact:
@@ -133,7 +133,7 @@
         --url={{ fleet_url }}
         --force
         --non-interactive
-        --enrollment-token={{ enrollment_token }}
+        --enrollment-token={{ lookup('env', 'ENROLLMENT_TOKEN') }}
         {% if agent_tags is defined and agent_tags|length > 0 %}--tag="{{ agent_tags }}"{% endif %}
       args:
         chdir: "{{ work_dir }}/{{ ea_filename }}"
