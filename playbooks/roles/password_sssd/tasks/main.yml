@@ -25,8 +25,8 @@
     group: root
     mode: '0644'
 
-- name: Set immutable attribute on /etc/pam.d/common-auth
-  command: chattr +i /etc/pam.d/common-auth
+# - name: Set immutable attribute on /etc/pam.d/common-auth
+#   command: chattr +i /etc/pam.d/common-auth
 
 - name: Backup existing /etc/pam.d/common-account
   copy:
@@ -46,8 +46,8 @@
     group: root
     mode: '0644'
 
-- name: Set immutable attribute on /etc/pam.d/common-account
-  command: chattr +i /etc/pam.d/common-account
+# - name: Set immutable attribute on /etc/pam.d/common-account
+#   command: chattr +i /etc/pam.d/common-account
 
 - name: Backup existing /etc/pam.d/common-password
   copy:
@@ -67,8 +67,8 @@
     group: root
     mode: '0644'
 
-- name: Set immutable attribute on /etc/pam.d/common-password
-  command: chattr +i /etc/pam.d/common-password
+# - name: Set immutable attribute on /etc/pam.d/common-password
+#   command: chattr +i /etc/pam.d/common-password
 
 - name: Backup existing /etc/security/faillock.conf
   copy:
@@ -88,8 +88,8 @@
     group: root
     mode: '0644'
 
-- name: Set immutable attribute on /etc/security/faillock.conf
-  command: chattr +i /etc/security/faillock.conf
+# - name: Set immutable attribute on /etc/security/faillock.conf
+#   command: chattr +i /etc/security/faillock.conf
 
 - name: Backup existing /etc/security/pwhistory.conf
   copy:
@@ -112,9 +112,9 @@
     mode: '0644'
   when: ansible_distribution == "Ubuntu"
 
-- name: Set immutable attribute on /etc/security/pwhistory.conf
-  command: chattr +i /etc/security/pwhistory.conf
-  when: ansible_distribution == "Ubuntu"
+# - name: Set immutable attribute on /etc/security/pwhistory.conf
+#   command: chattr +i /etc/security/pwhistory.conf
+#   when: ansible_distribution == "Ubuntu"
 
 - name: Backup existing /etc/security/pwquality.conf
   copy:
@@ -134,5 +134,5 @@
     group: root
     mode: '0644'
 
-- name: Set immutable attribute on /etc/security/pwquality.conf
-  command: chattr +i /etc/security/pwquality.conf
+# - name: Set immutable attribute on /etc/security/pwquality.conf
+#   command: chattr +i /etc/security/pwquality.conf
