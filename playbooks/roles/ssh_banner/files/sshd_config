@@ -137,6 +137,6 @@ ChallengeResponseAuthentication no
 Match User aapuser Address 20.65.208.250
     AllowUsers aapuser
 
-# Deny aapuser from all other IPs
-Match User aapuser
-    DenyUsers aapuser
+# # Deny aapuser from all other IPs
+# Match User aapuser
+#     DenyUsers aapuser
