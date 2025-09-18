@@ -27,6 +27,14 @@
     group: root
     mode: '0644'
 
+- name: Copy access.conf file
+  copy:
+    src: access.conf
+    dest: /etc/security/access.conf
+    owner: root
+    group: root
+    mode: '0440'
+
 - name: Copy aapuser sudoers file
   copy:
     src: 10-aapuser
