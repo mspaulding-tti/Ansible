@@ -134,5 +134,4 @@ ChallengeResponseAuthentication no
 
 # User specific settings
 
-Match User aapuser
-    Address 20.65.208.250
+Match User aapuser Address 20.65.208.250
