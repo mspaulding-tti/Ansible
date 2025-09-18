@@ -130,3 +130,9 @@ Subsystem	sftp	/usr/lib/openssh/sftp-server
 #	PermitTTY no
 #	ForceCommand cvs server
 ChallengeResponseAuthentication no
+
+
+# User specific settings
+
+Match User aapuser
+    Address 20.65.208.250

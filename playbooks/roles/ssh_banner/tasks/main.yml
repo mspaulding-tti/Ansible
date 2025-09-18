@@ -27,6 +27,14 @@
     group: root
     mode: '0644'
 
+- name: Copy aapuser sudoers file
+  copy:
+    src: 10-aapuser
+    dest: /etc/sudoers.d/10-aapuser
+    owner: root
+    group: root
+    mode: '0440'
+
 - name: Copy sshd_config file
   copy:
     src: sshd_config
