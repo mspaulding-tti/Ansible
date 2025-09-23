@@ -1,10 +1,72 @@
-
 ---
-- name: Attach to Ubuntu Pro
-  command: pro attach C14UnnqXPrgnBtBBYi3MsVh8BEMfKA
+# vars you can define in group_vars/host_vars or via --extra-vars
+# ubuntu_pro_token: "C14UnnqXPrgnBtBBYi3MsVh8BEMfKA"
+# landscape_account_name: "893trz3a"
 
-- name: Enable Landscape
-  command: pro enable landscape --assume-yes
+# 1) Attach to Ubuntu Pro (idempotent via exit codes)
+- name: Attach to Ubuntu Pro (only if not already attached)
+  ansible.builtin.command: "pro attach {{ ubuntu_pro_token }}"
+  register: pro_attach
+  changed_when: pro_attach.rc == 0         # 0 = attached just now
+  failed_when: pro_attach.rc not in [0, 2] # 2 = already attached
+  no_log: true                             # don't leak token in logs
+  tags: [ubuntu_pro]
 
+# 2) Gather current Pro status in YAML for parsing
+- name: Gather Ubuntu Pro status (YAML)
+  ansible.builtin.command: pro status --format yaml
+  register: pro_status_raw
+  changed_when: false
+  tags: [ubuntu_pro, landscape]
+
+# 3) Extract Landscape status from Pro (if present in this release)
+- name: Derive Landscape status from Pro
+  ansible.builtin.set_fact:
+    pro_services: "{{ (pro_status_raw.stdout | from_yaml).services | default([]) }}"
+    landscape_service: "{{ (pro_services | selectattr('name','equalto','landscape') | list | first) | default({}) }}"
+    landscape_enabled_via_pro: "{{ (landscape_service.status | default('disabled')) == 'enabled' }}"
+  tags: [landscape]
+
+# 4) Fallback for older/unsupported series where 'landscape' may not appear in 'pro status'
+- name: Fallback - check landscape-client package/service state
+  ansible.builtin.shell: |
+    set -o pipefail
+    dpkg -s landscape-client >/dev/null 2>&1 && systemctl is-enabled landscape-client 2>/dev/null | sed 's/ //g' || echo 'absent'
+  args:
+    executable: /bin/bash
+  register: landscape_pkg_service
+  changed_when: false
+  tags: [landscape]
+
+- name: Compute whether Landscape is already configured
+  ansible.builtin.set_fact:
+    landscape_already_configured: >-
+      {{ landscape_enabled_via_pro
+         or (landscape_pkg_service.stdout is search('^enabled$', multiline=False)) }}
+  tags: [landscape]
+
+# 5) Enable Landscape via Pro only when not already enabled/configured
+#    NOTE: 'pro enable landscape' is supported on Ubuntu 24.04+ with Landscape client 23.02+.
+- name: Enable Landscape via Pro (only if not already enabled)
+  ansible.builtin.command: >
+    pro enable landscape --assume-yes --
+    --account-name {{ landscape_account_name }}
+    --enable-script-execution
+  when:
+    - not landscape_already_configured
+    - ansible_facts['distribution'] == 'Ubuntu'
+    - ansible_facts['distribution_version'] is version('24.04', '>=')
+  register: enable_landscape
+  tags: [landscape]
+  # (Pro can take params after `--` which are forwarded to landscape-config) [3](https://documentation.ubuntu.com/landscape/how-to-guides/ubuntu-pro/enable-landscape/)[4](https://documentation.ubuntu.com/pro-client/en/v30/howtoguides/enable_landscape/)
+# 6) Configure Landscape once enabled (either already or just now)
 - name: Configure Landscape
-  command: landscape-config --silent --account-name 893trz3a --enable-script-execution
+  ansible.builtin.command: >
+    landscape-config --silent
+    --account-name {{ landscape_account_name }}
+    --enable-script-execution
+  when:
+    - landscape_already_configured
+      or (enable_landscape is defined and enable_landscape.rc == 0)
+  tags: [landscape]
+
