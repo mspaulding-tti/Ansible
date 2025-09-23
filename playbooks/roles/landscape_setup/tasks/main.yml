@@ -9,7 +9,7 @@
   register: pro_attach
   changed_when: pro_attach.rc == 0         # 0 = attached just now
   failed_when: pro_attach.rc not in [0, 2] # 2 = already attached
-  no_log: true                             # don't leak token in logs
+  # no_log: true                             # don't leak token in logs
   tags: [ubuntu_pro]
 
 # 2) Gather current Pro status in YAML for parsing
