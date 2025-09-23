@@ -1,0 +1,10 @@
+
+---
+- name: Attach to Ubuntu Pro
+  command: pro attach C14UnnqXPrgnBtBBYi3MsVh8BEMfKA
+
+- name: Enable Landscape
+  command: pro enable landscape --assume-yes
+
+- name: Configure Landscape
+  command: landscape-config --silent --account-name 893trz3a --enable-script-execution

@@ -3,4 +3,10 @@
   hosts: all
   become: true
   roles:
-    - rhel10_baseline
+    - password_sssd
+    - session_timeout
+    - ssh_banner
+    - tls_ciphers
+    - elastic_agent
+    - landscape_setup
+

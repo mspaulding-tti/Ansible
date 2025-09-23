@@ -8,3 +8,4 @@
     - ssh_banner
     - tls_ciphers
     - elastic_agent
+    - landscape_setup
