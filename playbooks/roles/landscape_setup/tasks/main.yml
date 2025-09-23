@@ -5,7 +5,7 @@
 
 # 1) Attach to Ubuntu Pro (idempotent via exit codes)
 - name: Attach to Ubuntu Pro (only if not already attached)
-  ansible.builtin.command: "pro attach {{ ubuntu_pro_token }}"
+  ansible.builtin.command: "pro attach {{ lookup('env', 'UBUNTU_PRO_TOKEN') }}"
   register: pro_attach
   changed_when: pro_attach.rc == 0         # 0 = attached just now
   failed_when: pro_attach.rc not in [0, 2] # 2 = already attached
@@ -50,7 +50,7 @@
 - name: Enable Landscape via Pro (only if not already enabled)
   ansible.builtin.command: >
     pro enable landscape --assume-yes --
-    --account-name {{ landscape_account_name }}
+    --account-name {{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
     --enable-script-execution
   when:
     - not landscape_already_configured
@@ -63,7 +63,7 @@
 - name: Configure Landscape
   ansible.builtin.command: >
     landscape-config --silent
-    --account-name {{ landscape_account_name }}
+    --account-name {{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
     --enable-script-execution
   when:
     - landscape_already_configured
