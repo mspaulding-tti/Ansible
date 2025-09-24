@@ -17,7 +17,7 @@
 - name: Enable Landscape silently
   ansible.builtin.command: >
     pro enable landscape --assume-yes --account-name {{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
-  when: not landscape_conf.stat.exists
+  # when: not landscape_conf.stat.exists
   tags: [landscape]
 
 # Ensure landscape-client is installed
@@ -28,15 +28,15 @@
     update_cache: yes
   tags: [landscape]
 
-# Deploy Landscape config file
-- name: Deploy Landscape config file
-  ansible.builtin.copy:
-    src: client.conf
-    dest: /etc/landscape/client.conf
-    owner: root
-    group: root
-    mode: '0644'
-  tags: [landscape]
+# # Deploy Landscape config file
+# - name: Deploy Landscape config file
+#   ansible.builtin.copy:
+#     src: client.conf
+#     dest: /etc/landscape/client.conf
+#     owner: root
+#     group: root
+#     mode: '0644'
+#   tags: [landscape]
 
 # Ensure landscape-client service is enabled and running
 - name: Ensure landscape-client service is enabled and running
