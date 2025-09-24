@@ -20,7 +20,7 @@
   ansible.builtin.command: >
     landscape-config
     --account-name "{{ lookup('env','LANDSCAPE_ACCOUNT_NAME') }}"
-    --script-execution enable
+    --include-manager-plugins=ScriptExecution
     --script-users root
   register: landscape_config_result
   changed_when: landscape_config_result.rc == 0
