@@ -18,7 +18,7 @@
   ansible.builtin.command: >
     pro enable landscape --assume-yes --
     --account-name {{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
-    --enable-script-execution
+    --include-manager-plugins ScriptExecution
   tags: [landscape]
 
 # Ensure landscape-client is installed
