@@ -9,9 +9,6 @@
     - tls_ciphers
     - elastic_agent
 
-- name: Configure baseline policy on Ubuntu systems only
-  hosts: all
-  become: true
-  roles:
-    - landscape_setup
-  when: ansible_distribution == 'Ubuntu'
+# Only run these roles/tasks on Ubuntu systems
+    - role: landscape_setup
+      when: ansible_distribution == 'Ubuntu'
