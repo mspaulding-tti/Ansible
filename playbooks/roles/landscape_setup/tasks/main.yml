@@ -4,6 +4,7 @@
   ansible.builtin.command: "pro attach {{ lookup('env', 'UBUNTU_PRO_TOKEN') }}"
   register: result
   failed_when: result.rc not in [0, 2]
+  changed_when: result.rc not in [0, 2]
   tags: [ubuntu_pro]
 
 # Ensure landscape-client is installed
