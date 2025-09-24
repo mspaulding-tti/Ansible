@@ -19,7 +19,10 @@
 - name: Configure landscape-client dynamically
   ansible.builtin.command: >
     landscape-config
+    --silent
     --account-name "{{ lookup('env','LANDSCAPE_ACCOUNT_NAME') }}"
+    --url=https://landscape.canonical.com/message-system
+    --ping-url=http://landscape.canonical.com/ping
     --include-manager-plugins=ScriptExecution
     --script-users root
   register: landscape_config_result
