@@ -7,11 +7,11 @@
   changed_when: result.rc not in [0, 2]
   tags: [ubuntu_pro]
 
-# Check if Landscape config file exists
-- name: Check if /etc/landscape/client.conf exists
-  ansible.builtin.stat:
-    path: /etc/landscape/client.conf
-  register: landscape_conf
+# # Check if Landscape config file exists
+# - name: Check if /etc/landscape/client.conf exists
+#   ansible.builtin.stat:
+#     path: /etc/landscape/client.conf
+#   register: landscape_conf
 
 # Enable Landscape if config file does not exist
 - name: Enable Landscape silently
