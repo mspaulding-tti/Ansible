@@ -1,5 +1,5 @@
 ---
-- name: Configure baseline policy on Ubuntu with PAM Authentication and Azure Active Directory (Entra ID)
+- name: Configure baseline policy on Ubuntu/Debian servers with PAM Authentication and Azure Active Directory (Entra ID)
   hosts: all
   become: true
   roles:
@@ -8,4 +8,10 @@
     - ssh_banner
     - tls_ciphers
     - elastic_agent
+
+- name: Configure baseline policy on Ubuntu systems only
+  hosts: all
+  become: true
+  roles:
     - landscape_setup
+  when: ansible_distribution == 'Ubuntu'
