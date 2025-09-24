@@ -15,18 +15,13 @@
   tags: [landscape]
 
 # Deploy Landscape config file
-# Configure Landscape client dynamically
-- name: Configure landscape-client dynamically
-  ansible.builtin.command: >
-    landscape-config
-    --silent
-    --account-name "{{ lookup('env','LANDSCAPE_ACCOUNT_NAME') }}"
-    --url=https://landscape.canonical.com/message-system
-    --ping-url=http://landscape.canonical.com/ping
-    --include-manager-plugins=ScriptExecution
-    --script-users root
-  register: landscape_config_result
-  changed_when: landscape_config_result.rc == 0
+- name: Deploy Landscape config file
+  ansible.builtin.copy:
+    src: client.conf
+    dest: /etc/landscape/client.conf
+    owner: root
+    group: root
+    mode: '0644'
   tags: [landscape]
 
 # Ensure landscape-client service is enabled and running
