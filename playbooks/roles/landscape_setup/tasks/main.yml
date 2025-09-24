@@ -13,13 +13,24 @@
     path: /etc/landscape/client.conf
   register: landscape_conf
 
+
+# Check if expected account_name is present in client.conf
+- name: Check if expected account_name is present in /etc/landscape/client.conf
+  ansible.builtin.command: >
+    grep -qE '^[[:space:]]*account_name[[:space:]]*=[[:space:]]*893trz3a([[:space:]]*#.*)?[[:space:]]*$' /etc/landscape/client.conf
+  register: account_name_check
+  failed_when: false
+  changed_when: false
+
+
 # Enable Landscape if config file does not exist
 - name: Enable Landscape silently
   ansible.builtin.command: >
     pro enable landscape --assume-yes -- 
     --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} 
     --include-manager-plugins=ScriptExecution
-  when: not landscape_conf.stat.exists
+  # when: not landscape_conf.stat.exists
+  when: account_name_check.rc != 0
   tags: [landscape]
 
 # # Configure Landscape if config file does not exist
