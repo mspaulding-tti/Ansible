@@ -16,15 +16,15 @@
 # Enable Landscape if config file does not exist
 - name: Enable Landscape silently
   ansible.builtin.command: >
-    pro enable landscape --assume-yes 
+    pro enable landscape --assume-yes --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} --include-manager-plugins=ScriptExecution
   when: not landscape_conf.stat.exists
   tags: [landscape]
 
-# Configure Landscape if config file does not exist
-- name: Enable Landscape silently
-  ansible.builtin.command: landscape-config --silent --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} --include-manager-plugins=ScriptExecution
-  when: not landscape_conf.stat.exists
-  tags: [landscape]
+# # Configure Landscape if config file does not exist
+# - name: Enable Landscape silently
+#   ansible.builtin.command: landscape-config --silent --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} --include-manager-plugins=ScriptExecution
+#   when: not landscape_conf.stat.exists
+#   tags: [landscape]
 
 # Ensure landscape-client is installed
 - name: Ensure landscape-client is installed
