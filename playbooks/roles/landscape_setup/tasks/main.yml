@@ -22,10 +22,7 @@
 
 # Configure Landscape if config file does not exist
 - name: Enable Landscape silently
-  ansible.builtin.command: >
-    landscape-config --silent
-    --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
-    --include-manager-plugins=ScriptExecution
+  ansible.builtin.command: landscape-config --silent --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} --include-manager-plugins=ScriptExecution
   when: not landscape_conf.stat.exists
   tags: [landscape]
 
