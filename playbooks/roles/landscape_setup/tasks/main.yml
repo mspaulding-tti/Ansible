@@ -20,11 +20,28 @@
   tags: [ubuntu_pro, landscape]
 
 # 3) Extract Landscape status from Pro (if present in this release)
-- name: Derive Landscape status from Pro
+- name: Parse Ubuntu Pro status YAML
   ansible.builtin.set_fact:
-    pro_services: "{{ (pro_status_raw.stdout | from_yaml).services | default([]) }}"
-    landscape_service: "{{ (pro_services | selectattr('name','equalto','landscape') | list | first) | default({}) }}"
+    pro_status_parsed: "{{ pro_status_raw.stdout | from_yaml }}"
+  when: pro_status_raw.stdout is defined
+  tags: [landscape]
+
+- name: Extract services from parsed Pro status
+  ansible.builtin.set_fact:
+    pro_services: "{{ pro_status_parsed.services | default([]) }}"
+  when: pro_status_parsed is defined and pro_status_parsed.services is defined
+  tags: [landscape]
+
+- name: Find Landscape service in Pro services
+  ansible.builtin.set_fact:
+    landscape_service: "{{ pro_services | selectattr('name','equalto','landscape') | list | first | default({}) }}"
+  when: pro_services is defined
+  tags: [landscape]
+
+- name: Determine if Landscape is enabled via Pro
+  ansible.builtin.set_fact:
     landscape_enabled_via_pro: "{{ (landscape_service.status | default('disabled')) == 'enabled' }}"
+  when: landscape_service is defined
   tags: [landscape]
 
 # 4) Fallback for older/unsupported series where 'landscape' may not appear in 'pro status'
