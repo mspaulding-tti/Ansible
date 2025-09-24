@@ -7,17 +7,17 @@
   changed_when: result.rc not in [0, 2]
   tags: [ubuntu_pro]
 
-# # Check if Landscape config file exists
-# - name: Check if /etc/landscape/client.conf exists
-#   ansible.builtin.stat:
-#     path: /etc/landscape/client.conf
-#   register: landscape_conf
+# Check if Landscape config file exists
+- name: Check if /etc/landscape/client.conf exists
+  ansible.builtin.stat:
+    path: /etc/landscape/client.conf
+  register: landscape_conf
 
 # Enable Landscape if config file does not exist
 - name: Enable Landscape silently
   ansible.builtin.command: >
     pro enable landscape --assume-yes 
-  # when: not landscape_conf.stat.exists
+  when: not landscape_conf.stat.exists
   tags: [landscape]
 
 # Configure Landscape if config file does not exist
@@ -26,7 +26,7 @@
     landscape-config --silent
     --account-name={{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }}
     --include-manager-plugins=ScriptExecution
-  # when: not landscape_conf.stat.exists
+  when: not landscape_conf.stat.exists
   tags: [landscape]
 
 # Ensure landscape-client is installed
