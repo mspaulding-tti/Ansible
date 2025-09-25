@@ -29,7 +29,7 @@
     pro enable landscape --assume-yes -- 
     --account-name {{ lookup('env', 'LANDSCAPE_ACCOUNT_NAME') }} 
     --include-manager-plugins ScriptExecution
-    --computer-title {{ inventory_hostname }}
+    --computer-title {{ ansible_hostname }}
   # when: not landscape_conf.stat.exists
   when: account_name_check.rc != 0
   tags: [landscape]
