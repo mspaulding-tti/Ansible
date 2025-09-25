@@ -1,0 +1,7 @@
+---
+- name: Gather facts for all Azure hosts
+  hosts: all
+  gather_facts: true
+  tasks:
+    - debug:
+        msg: "Facts gathered for {{ inventory_hostname }}"
