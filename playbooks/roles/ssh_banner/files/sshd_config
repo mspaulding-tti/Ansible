@@ -133,7 +133,7 @@ ChallengeResponseAuthentication no
 
 
 # User specific settings
-# Allow aapuser only from 20.65.208.250
+Allow aapuser only from 20.65.208.250
 # Match User aapuser Address 20.65.208.250
 #     AllowUsers aapuser
 
