@@ -134,9 +134,11 @@ ChallengeResponseAuthentication no
 
 # User specific settings
 # Allow aapuser only from 20.65.208.250
-AllowUsers aapuser@20.65.208.250
-# Match User aapuser Address 20.65.208.250
-#     AllowUsers aapuser
+# AllowUsers aapuser@20.65.208.250
+Match User aapuser Address 20.65.208.250
+    # Optional: tighten security for this user
+    PasswordAuthentication no
+    PubkeyAuthentication yes
 
 # # Deny aapuser from all other IPs
 # Match User aapuser
