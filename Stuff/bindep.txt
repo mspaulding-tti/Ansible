@@ -1,0 +1,37 @@
+# bindep.txt for Ansible Execution Environment
+# This file lists system-level dependencies required by the EE
+
+# Basic utilities
+git [platform:rpm platform:dpkg]
+openssh-clients [platform:rpm]
+openssh-client [platform:dpkg]
+sshpass [platform:rpm platform:dpkg]
+unzip [platform:rpm platform:dpkg]
+tar [platform:rpm platform:dpkg]
+
+# Kerberos for Windows authentication
+krb5-workstation [platform:rpm]
+krb5-user [platform:dpkg]
+krb5-libs [platform:rpm]
+libkrb5-3 [platform:dpkg]
+
+# SSL and certificates
+ca-certificates [platform:rpm platform:dpkg]
+
+# Build tools (sometimes needed for Python packages)
+gcc [platform:rpm platform:dpkg]
+python3-devel [platform:rpm]
+python3-dev [platform:dpkg]
+
+# For cloud SDKs and crypto
+openssl [platform:rpm platform:dpkg]
+libffi-devel [platform:rpm]
+libffi-dev [platform:dpkg]
+
+# For Docker SDK and container operations
+podman [platform:rpm]
+docker [platform:dpkg]
+
+# For GCP and Azure SDKs (may need curl and gnupg for repo setup)
+curl [platform:rpm platform:dpkg]
+gnupg [platform:rpm platform:dpkg]

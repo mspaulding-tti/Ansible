@@ -1,0 +1,76 @@
+
+version: 3
+
+images:
+  base_image:
+    # AAP 2.5 minimal RHEL 9 base EE
+    name: "registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest"
+
+options:
+  # RHEL/UBI images use microdnf
+  package_manager_path: /usr/bin/microdnf
+
+dependencies:
+  # Use the collections/requirements.yml we generated earlier
+  galaxy:
+    requirements: requirements.yml
+
+  # Cross-cloud + Windows connectivity Python libraries
+  python:
+    # Windows remoting (WinRM/PSRP) and auths (NTLM/Kerberos/CredSSP)
+    - pywinrm>=0.4.3
+    - pypsrp>=0.7.1
+    - requests-ntlm>=1.1.0
+    - requests-kerberos>=0.14.0
+    - requests-credssp>=2.0.0
+    - pyspnego>=0.9.0
+
+    # AWS SDK
+    - boto3
+    - botocore
+
+    # HashiCorp Vault for community.hashi_vault
+    - hvac
+
+    # Kubernetes and OpenShift clients for kubernetes.core
+    - kubernetes
+    - openshift
+
+    # GCP common auth + storage client (other libs are resolved via collection introspection)
+    - google-auth
+    - google-cloud-storage
+
+    # Docker SDK for community.docker
+    - docker
+
+    # Crypto helpers for TLS/PKI tasks
+    - cryptography
+
+    # (Optional) If you prefer to pin Azure SDKs explicitly instead of relying on collection introspection,
+    # uncomment a minimal set below. Otherwise, Ansible Builder will pull what azure.azcollection declares.
+    # - azure-identity
+    # - azure-mgmt-resource
+    # - azure-mgmt-compute
+    # - azure-mgmt-network
+    # - azure-mgmt-storage
+    # - azure-storage-blob
+
+  # System packages commonly needed in EEs
+  system:
+    - git
+    - openssh-clients
+    - sshpass
+    - krb5-workstation
+    - krb5-libs
+    - unzip
+    - tar
+
+# You can add additional build steps/files if needed, e.g., custom CA bundles or ansible.cfg
+# additional_build_files:
+#   - src: files/ansible.cfg
+#     dest: configs
+# additional_build_steps:
+#   prepend_final: |
+#     RUN update-ca-trust
+#   append_final:
+#     - RUN echo "EE build complete"
