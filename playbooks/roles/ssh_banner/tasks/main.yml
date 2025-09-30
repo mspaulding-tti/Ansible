@@ -43,6 +43,17 @@
     group: root
     mode: '0440'
 
+
+- name: Delete specific SSH config files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ssh/sshd_config.d/50-cloud-init.conf
+    - /etc/ssh/sshd_config.d/50-cloudimg-settings.conf
+    - /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+  ignore_errors: yes  # In case the files do not exist
+  
 - name: Copy sshd file
   copy:
     src: sshd
