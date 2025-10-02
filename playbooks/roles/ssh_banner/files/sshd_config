@@ -1,4 +1,5 @@
-
+# This file is managed by Ansible
+#
 # This is the sshd server system-wide configuration file.  See
 # sshd_config(5) for more information.
 
@@ -133,7 +134,15 @@ ChallengeResponseAuthentication no
 
 
 # User specific settings
-# Allow aapuser from 20.65.208.250
+
+# Added by aadsshlogin installer
+Match User *@*,????????-????-????-????-????????????    
+    AuthenticationMethods publickey
+    PubkeyAuthentication yes
+    AuthorizedKeysCommand /usr/sbin/aad_certhandler %u %k
+    AuthorizedKeysCommandUser root
+
+# Allow aapuser only from 20.65.208.250
 Match User aapuser Address 20.65.208.250
     # Optional: tighten security for this user
     PasswordAuthentication no
