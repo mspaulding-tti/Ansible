@@ -43,15 +43,15 @@
     group: root
     mode: '0440'
 
-# - name: Copy sshd file
-#   copy:
-#     src: sshd
-#     dest: /etc/pam.d/sshd
-#     owner: root
-#     group: root
-#     mode: '0644'
-#     backup: yes  # Already present: Backs up the existing sshd_config before overwriting
-#   register: sshd_config_copy
+- name: Copy sshd file
+  copy:
+    src: sshd
+    dest: /etc/pam.d/sshd
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes  # Already present: Backs up the existing sshd_config before overwriting
+  register: sshd_config_copy
 
 - name: Copy sshd_config file
   copy:
