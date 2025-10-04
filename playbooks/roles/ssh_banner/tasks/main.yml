@@ -62,6 +62,7 @@
     mode: '0600'
     backup: yes  # Already present: Backs up the existing sshd_config before overwriting
   register: sshd_config_copy
+  when: ansible_os_family != "RedHat"
 
 - name: Restart ssh service
   service:
