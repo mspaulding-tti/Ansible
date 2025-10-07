@@ -1,6 +1,6 @@
-# This file is managed by Ansible, changes will be overwritten
+# This file is managed by Ansible, changes will be overwritten.
 #
-# /etc/pam.d/common-account - authorization settings common to all services
+# etc/pam.d/common-account - authorization settings common to all services
 #
 # This file is included from other service-specific PAM config files,
 # and should contain a list of the authorization modules that define

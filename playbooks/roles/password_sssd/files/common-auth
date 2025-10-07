@@ -1,4 +1,4 @@
-# This file is managed by Ansible, changes will be overwritten
+# This file is managed by Ansible, changes will be overwritten.
 #
 # /etc/pam.d/common-auth - authentication settings common to all services
 #
@@ -15,11 +15,11 @@
 # pam-auth-update(8) for details.
 #
 # here are the per-package modules (the "Primary" block)
-auth       required pam_faillock.so preauth 
+auth       required pam_faillock.so preauth  audit deny=5 unlock_time=900
 auth       [success=2 default=ignore]      pam_unix.so nullok
 auth       [success=1 default=ignore]      pam_sss.so use_first_pass
-auth       [default=die] pam_faillock.so authfail 
-auth       sufficient pam_faillock.so authsucc 
+auth       [default=die] pam_faillock.so authfail  audit deny=5 unlock_time=900
+auth       sufficient pam_faillock.so authsucc  audit deny=5 unlock_time=900
 # here's the fallback if no module succeeds
 auth       requisite pam_deny.so
 # prime the stack with a positive return value if there isn't one already;

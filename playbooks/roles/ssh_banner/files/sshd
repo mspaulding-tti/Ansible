@@ -1,12 +1,15 @@
 # This file is managed by Ansible, changes will be overwritten.
+#
 # See the ssh_banner role for details.
 # PAM configuration for the Secure Shell service
 
 # Standard Un*x authentication.
 @include common-auth
 
+# Require ssh to use the /etc/access.conf file.
+# account    required     pam_access.so
+
 # Disallow non-root logins when /etc/nologin exists.
-account    required     pam_access.so
 account    required     pam_nologin.so
 
 # Uncomment and edit /etc/security/access.conf if you need to set complex

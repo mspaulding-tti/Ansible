@@ -1,1 +1,3 @@
+# This file is managed by Ansible, changes will be overwritten.
+#
 aapuser ALL=(ALL) NOPASSWD:ALL
