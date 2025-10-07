@@ -1,0 +1,22 @@
+---
+- name: Get VM extension info
+  azure.azcollection.azure_rm_virtualmachineextension_info:
+    name: "{{ inventory_hostname }}"
+    resource_group: "{{ ansible_resource_group }}"
+    virtual_machine_name: "{{ inventory_hostname }}"
+  register: vm_extensions
+
+- name: Install AADSSHLoginForLinux if not present and OS is Ubuntu/Debian
+  azure.azcollection.azure_rm_virtualmachineextension:
+    name: "AADSSHLoginForLinux"
+    resource_group: "{{ ansible_resource_group }}"
+    location: "{{ ansible_location }}"
+    virtual_machine_name: "{{ inventory_hostname }}"
+    publisher: "Microsoft.Azure.ActiveDirectory"
+    virtual_machine_extension_type: "AADSSHLoginForLinux"
+    type_handler_version: "1.0"
+    auto_upgrade_minor_version: true
+    state: present
+  when: >
+    (ansible_distribution in ['Ubuntu', 'Debian']) and
+    (vm_extensions.extensions | selectattr('name', 'equalto', 'AADSSHLoginForLinux') | list | length == 0)

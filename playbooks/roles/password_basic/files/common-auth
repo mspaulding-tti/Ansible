@@ -1,3 +1,5 @@
+# This file is managed by Ansible, changes will be overwritten
+#
 # /etc/pam.d/common-auth - authentication settings common to all services
 #
 # This file is included from other service-specific PAM config files,

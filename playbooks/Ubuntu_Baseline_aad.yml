@@ -3,6 +3,7 @@
   hosts: all
   become: true
   roles:
+    - AADSSHLogin
     - password_aad
     - session_timeout
     - ssh_banner
