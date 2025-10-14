@@ -2,17 +2,23 @@
 # roles/AADSSHLogin/tasks/main.yml
 
 # 0) Derive identifiers from dynamic inventory (robust fallbacks)
+- name: Build parts from resource ID (if present)
+  vars:
+    hv: "{{ hostvars[inventory_hostname] }}"
+  set_fact:
+    rid_parts: "{{ (hv.id | default('')).split('/') }}"
+
 - name: Derive Azure identifiers from hostvars
   vars:
     hv: "{{ hostvars[inventory_hostname] }}"
   set_fact:
+    # Prefer explicit fields from inventory; fall back to parsing the resource ID
     azure_rg: >-
       {{ hv.resource_group
-         default((hv.id | default('')).split('/')[4] | default(omit)) }}
+         | default(rid_parts[4] | default(omit), true) }}
     azure_vm_name: >-
       {{ hv.name
-         default((hv.id | default('')).split('/')[-1]
-         | default(inventory_hostname)) }}
+         | default(rid_parts[-1] | default(inventory_hostname), true) }}
     azure_location: "{{ hv.location | default(omit) }}"
 
 - name: Validate required identifiers
@@ -25,6 +31,11 @@
 
 # -------- All Azure API calls run on the controller (EE) --------
 - block:
+    # Optional sanity: prove we're running locally in the EE
+    - name: Sanity | show python on delegated host
+      command: python3 -c 'import sys,platform; print(sys.executable, platform.node())'
+      changed_when: false
+
     # 1) If location isn't in hostvars, fetch it from the VM
     - name: Get VM info when location is missing
       when: azure_location is not defined
