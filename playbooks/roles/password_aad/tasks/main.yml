@@ -1,90 +1,113 @@
 ---
-# roles/AADSSHLogin/tasks/main.yml
+- name: Ensure required PAM packages are installed
+  apt:
+    name:
+      - libpam-modules
+      - libpam-pwquality
+    state: present
+    update_cache: yes
 
-# 0) Derive identifiers from dynamic inventory (robust fallbacks)
-- name: Derive Azure identifiers from hostvars
-  vars:
-    hv: "{{ hostvars[inventory_hostname] }}"
-  set_fact:
-    # Prefer values the azure_rm inventory usually provides; fall back to parsing the resource ID
-    azure_rg: >-
-      {{ hv.resource_group
-         default((hv.id
-           default('')).split('/')[4]
-           default(omit)) }}
-    azure_vm_name: >-
-      {{ hv.name
-         default((hv.id
-           default('')).split('/')[-1]
-           default(inventory_hostname)) }}
-    azure_location: "{{ hv.location | default(omit) }}"
+- name: Ensure required AAD packages are installed
+  apt:
+    name:
+      - aadsshlogin
+      - aadsshlogin-selinux
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Ubuntu"
 
-- name: Validate required identifiers
-  assert:
-    that:
-      - azure_rg is defined
-      - azure_vm_name is defined
-    fail_msg: >
-      Missing resource_group and/or VM name in hostvars for {{ inventory_hostname }}.
-      Ensure your azure_rm inventory populates 'resource_group' and 'name' or that 'id' is present.
+- name: Backup existing /etc/pam.d/common-auth
+  copy:
+    src: /etc/pam.d/common-auth
+    dest: /etc/pam.d/common-auth.bak
+    remote_src: yes
+    backup: yes
 
-# --- All Azure API calls happen on the controller (EE) ---
-- block:
-    # 1) If location isn't in hostvars, fetch it from the VM
-    - name: Get VM info when location is missing
-      when: azure_location is not defined
-      azure.azcollection.azure_rm_virtualmachine_info:
-        resource_group: "{{ azure_rg }}"
-        name: "{{ azure_vm_name }}"
-      register: vm_info
+- name: Set custom PAM configuration for faillock in /etc/pam.d/common-auth
+  copy:
+    src: common-auth
+    dest: /etc/pam.d/common-auth
+    owner: root
+    group: root
+    mode: '0644'
 
-    - name: Set location and image metadata
-      when: azure_location is not defined and (vm_info.vms | length) > 0
-      set_fact:
-        azure_location: "{{ (vm_info.vms | first).location }}"
-        vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('') }}"
-        vm_image_offer: "{{ (vm_info.vms | first).storage_profile.image_reference.offer | default('') }}"
+- name: Backup existing /etc/pam.d/common-account
+  copy:
+    src: /etc/pam.d/common-account
+    dest: /etc/pam.d/common-account.bak
+    remote_src: yes
+    backup: yes
 
-    # 2) Query the specific extension by name
-    - name: Get AAD SSH extension info
-      azure.azcollection.azure_rm_virtualmachineextension_info:
-        resource_group: "{{ azure_rg }}"
-        virtual_machine_name: "{{ azure_vm_name }}"  # <-- correct param name
-        name: "AADSSHLoginForLinux"
-      register: extension_info
+- name: Set custom PAM configuration for faillock in /etc/pam.d/common-account
+  copy:
+    src: common-account
+    dest: /etc/pam.d/common-account
+    owner: root
+    group: root
+    mode: '0644'
 
-    # 3) Install extension only if not present (Ubuntu/Debian images)
-    - name: Ensure AADSSHLoginForLinux is present (Ubuntu/Debian only)
-      azure.azcollection.azure_rm_virtualmachineextension:
-        resource_group: "{{ azure_rg }}"
-        virtual_machine_name: "{{ azure_vm_name }}"  # <-- correct param name
-        name: "AADSSHLoginForLinux"
-        location: "{{ azure_location }}"
-        publisher: "Microsoft.Azure.ActiveDirectory"
-        virtual_machine_extension_type: "AADSSHLoginForLinux"
-        type_handler_version: "1.0"
-        auto_upgrade_minor_version: true
-        state: present
-      when:
-        - (extension_info.extensions
-           | selectattr('name', 'equalto', 'AADSSHLoginForLinux')
-           | list | length) == 0
-        - >
-          (vm_image_publisher
-            | default(hostvars[inventory_hostname].image_publisher
-              | default(''))) | lower in ['canonical','debian']
-          or
-          ((vm_image_offer
-            | default(hostvars[inventory_hostname].image_offer
-              | default(''))) | lower is search('ubuntu|debian'))
+- name: Backup existing /etc/pam.d/common-password
+  copy:
+    src: /etc/pam.d/common-password
+    dest: /etc/pam.d/common-password.bak
+    remote_src: yes
+    backup: yes
 
-  delegate_to: localhost
-  vars:
-    # Ensure local execution on the controller for these tasks
-    ansible_connection: local
-  environment:
-    # Standard SP env vars for DefaultAzureCredential()
-    AZURE_CLIENT_ID: "{{ lookup('env','AZURE_CLIENT_ID') }}"
-    AZURE_TENANT_ID: "{{ lookup('env','AZURE_TENANT_ID') }}"
-    AZURE_CLIENT_SECRET: "{{ lookup('env','AZURE_CLIENT_SECRET') }}"
-    AZURE_SUBSCRIPTION_ID: "{{ lookup('env','AZURE_SUBSCRIPTION_ID') }}"
+- name: Set custom PAM configuration in /etc/pam.d/common-password
+  copy:
+    src: common-password
+    dest: /etc/pam.d/common-password
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Backup existing /etc/security/faillock.conf
+  copy:
+    src: /etc/security/faillock.conf
+    dest: /etc/security/faillock.conf.bak
+    remote_src: yes
+    backup: yes
+
+- name: Set custom PAM configuration for faillock in /etc/security/faillock.conf
+  copy:
+    src: faillock.conf
+    dest: /etc/security/faillock.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Backup existing /etc/security/pwhistory.conf
+  copy:
+    src: /etc/security/pwhistory.conf
+    dest: /etc/security/pwhistory.conf.bak
+    remote_src: yes
+    backup: yes
+  when:
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_version is version('24.04', '>=')
+
+- name: Set custom PAM configuration for pwhistory in /etc/security/pwhistory.conf
+  copy:
+    src: pwhistory.conf
+    dest: /etc/security/pwhistory.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_version is version('24.04', '>=')
+
+- name: Backup existing /etc/security/pwquality.conf
+  copy:
+    src: /etc/security/pwquality.conf
+    dest: /etc/security/pwquality.conf.bak
+    remote_src: yes
+    backup: yes
+
+- name: Set custom PAM configuration for pwquality in /etc/security/pwquality.conf
+  copy:
+    src: pwquality.conf
+    dest: /etc/security/pwquality.conf
+    owner: root
+    group: root
+    mode: '0644'
