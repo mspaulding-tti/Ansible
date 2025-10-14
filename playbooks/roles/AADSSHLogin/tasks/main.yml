@@ -90,12 +90,12 @@
     # ---- Normalize and decide whether to install on this image ----
     - name: Normalize image fields and decide applicability
       set_fact:
-        vm_image_publisher_lc: "{{ (vm_image_publisher | default('')) | lower }}"
-        vm_image_offer_lc:     "{{ (vm_image_offer     | default('')) | lower }}"
+        vm_image_publisher_lc: "{{ (vm_image_publisher | default('unknown')) | lower }}"
+        vm_image_offer_lc: "{{ (vm_image_offer | default('')) | lower }}"
         aadsshlogin_is_supported_image: >-
           {{
-            (vm_image_publisher_lc in ['canonical','debian'])
-            or ('ubuntu' in vm_image_offer_lc or 'debian' in vm_image_offer_lc)
+            ((vm_image_publisher | default('unknown') | lower) in ['canonical', 'debian'])
+            or ('ubuntu' in (vm_image_offer | default('') | lower) or 'debian' in (vm_image_offer | default('') | lower))
             or (aadsshlogin_install_on_all_linux | default(false) | bool)
           }}
 
@@ -103,7 +103,7 @@
       debug:
         msg:
           - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
-          - "Publisher={{ vm_image_publisher }} Offer={{ vm_image_offer }}"
+          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }}"
           - "Install on this image? {{ aadsshlogin_is_supported_image }}"
       when: aadsshlogin_debug | default(false) | bool
 
