@@ -1,165 +1,122 @@
 ---
 # roles/AADSSHLogin/tasks/main.yml
-# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux)
-# for Linux VMs, delegated to localhost so Azure SDK imports happen in the EE.
+# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux) and
+# client-side package "aadsshloginforlinux" on Debian and Ubuntu VMs where not already installed.
 
-###############################################################################
-# 0) Gather and normalize identifiers from inventory/hostvars
-###############################################################################
-- name: Build parts from resource ID (if present)
-  vars:
-    hv: "{{ hostvars[inventory_hostname] }}"
-  set_fact:
-    rid_parts: "{{ (hv.id | default('')) | string | split('/') }}"
-
-- name: Derive Azure identifiers from hostvars
-  vars:
-    hv: "{{ hostvars[inventory_hostname] }}"
-  set_fact:
-    azure_rg: >-
-      {{ hv.resource_group
-         | default(rid_parts[4] | default(omit), true) }}
-    azure_vm_name: >-
-      {{ hv.name
-         | default(rid_parts[-1] | default(inventory_hostname), true) }}
-    azure_location: "{{ hv.location | default(omit) }}"
-
-- name: Validate required identifiers
-  assert:
+- name: Validate inventory identifiers
+  ansible.builtin.assert:
     that:
-      - azure_rg is defined
-      - azure_vm_name is defined
-    fail_msg: >
-      Missing resource_group and/or VM name for {{ inventory_hostname }}.
-      Ensure your inventory/hostvars include them or an Azure resource ID.
+      - hostvars[inventory_hostname].resource_group is defined
+      - hostvars[inventory_hostname].name is defined or inventory_hostname is defined
+    fail_msg: "Missing resource_group or name for {{ inventory_hostname }} in hostvars."
 
-###############################################################################
-# 1) All Azure control-plane calls delegated to localhost (controller/EE)
-###############################################################################
+- name: Set Azure identifiers
+  ansible.builtin.set_fact:
+    azure_rg: "{{ hostvars[inventory_hostname].resource_group }}"
+    azure_vm_name: "{{ hostvars[inventory_hostname].name | default(inventory_hostname) }}"
+    azure_location: "{{ hostvars[inventory_hostname].location | default('unknown') }}"
+
 - block:
-    - name: Optional | Sanity info about where we are running
-      command: python3 -c 'import sys,platform; print(sys.executable, platform.node())'
-      changed_when: false
-      when: aadsshlogin_debug | default(true) | bool
+    - name: Resolve Azure credentials
+      ansible.builtin.set_fact:
+        azure_subscription_id: "{{ aadsshlogin_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
+        azure_client_id: "{{ aadsshlogin_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
+        azure_secret: "{{ aadsshlogin_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
+        azure_tenant: "{{ aadsshlogin_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
 
-    # ---- Credentials resolution (env or role vars) ----
-    - name: Resolve Azure credentials (from vars or environment)
-      set_fact:
-        _azure_sub:    "{{ aadsshlogin_subscription_id | default(lookup('env','AZURE_SUBSCRIPTION_ID')) }}"
-        _azure_client: "{{ aadsshlogin_client_id       | default(lookup('env','AZURE_CLIENT_ID')) }}"
-        _azure_secret: >-
-          {{ aadsshlogin_secret
-             | default(lookup('env','AZURE_SECRET') or lookup('env','AZURE_CLIENT_SECRET')) }}
-        _azure_tenant: >-
-          {{ aadsshlogin_tenant
-             | default(lookup('env','AZURE_TENANT') or lookup('env','AZURE_TENANT_ID')) }}
-
-    - name: Guard | Ensure Azure credentials are available
-      assert:
+    - name: Ensure Azure credentials are available
+      ansible.builtin.assert:
         that:
-          - _azure_sub is defined and _azure_sub | length > 0
-          - _azure_client is defined and _azure_client | length > 0
-          - _azure_secret is defined and _azure_secret | length > 0
-          - _azure_tenant is defined and _azure_tenant | length > 0
+          - azure_subscription_id | length > 0
+          - azure_client_id | length > 0
+          - azure_secret | length > 0
+          - azure_tenant | length > 0
         fail_msg: >
-          Azure credentials not available. Provide subscription_id, client_id, secret, tenant
-          via role vars (aadsshlogin_*) or environment vars
+          Azure credentials missing. Set aadsshlogin_subscription_id, aadsshlogin_client_id,
+          aadsshlogin_secret, aadsshlogin_tenant or environment variables
           (AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID, AZURE_SECRET/AZURE_CLIENT_SECRET, AZURE_TENANT/AZURE_TENANT_ID).
 
-    # ---- Lookup VM details to retrieve image details ----
-    - name: Get VM info to retrieve image details
+    - name: Get VM image details
       azure.azcollection.azure_rm_virtualmachine_info:
         resource_group: "{{ azure_rg }}"
         name: "{{ azure_vm_name }}"
-        subscription_id: "{{ _azure_sub }}"
-        client_id:       "{{ _azure_client }}"
-        secret:          "{{ _azure_secret }}"
-        tenant:          "{{ _azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
       register: vm_info
       no_log: true
       retries: 3
       delay: 10
 
-    - name: Set location and OS image metadata
-      when: (vm_info.vms | length) > 0
-      set_fact:
-        azure_location: "{{ (vm_info.vms | first).location }}"
-        vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('') }}"
-        vm_image_offer:     "{{ (vm_info.vms | first).storage_profile.image_reference.offer     | default('') }}"
-        vm_image_sku:       "{{ (vm_info.vms | first).storage_profile.image_reference.sku       | default('') }}"
-
-    - name: Debug | VM image details
-      debug:
-        msg:
-          - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
-          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }} SKU={{ vm_image_sku | default('not set') }}"
+    - name: Debug VM info
+      ansible.builtin.debug:
+        msg: "VM info: {{ vm_info | to_json | default('No VM info retrieved') }}"
       when: aadsshlogin_debug | default(true) | bool
 
-    # ---- Normalize and decide whether to install on this image ----
-    - name: Normalize image fields and decide applicability
-      set_fact:
-        vm_image_publisher_lc: "{{ (vm_image_publisher | default('unknown')) | lower }}"
-        vm_image_offer_lc: "{{ (vm_image_offer | default('') | lower) }}"
-        vm_image_sku_lc: "{{ (vm_image_sku | default('') | lower) }}"
-        aadsshlogin_is_supported_image: >-
+    - name: Set image metadata
+      ansible.builtin.set_fact:
+        vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        vm_image_offer: "{{ (vm_info.vms | first).storage_profile.image_reference.offer | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        vm_image_sku: "{{ (vm_info.vms | first).storage_profile.image_reference.sku | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        azure_location: "{{ (vm_info.vms | first).location | default(azure_location) if vm_info.vms | length > 0 else azure_location }}"
+
+    - name: Debug image details
+      ansible.builtin.debug:
+        msg:
+          - "VM={{ azure_vm_name }} RG={{ azure_rg }} Location={{ azure_location }}"
+          - "Publisher={{ vm_image_publisher }} Offer={{ vm_image_offer }} SKU={{ vm_image_sku }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Determine if VM is supported (Debian or Ubuntu)
+      ansible.builtin.set_fact:
+        is_supported_image: >-
           {{
-            (
-              (vm_image_publisher | default('unknown') | lower) == 'canonical' and
-              (vm_image_offer | default('') | lower | regex_search('ubuntu'))
-            ) or
-            (
-              (vm_image_publisher | default('unknown') | lower) == 'debian' and
-              (vm_image_offer | default('') | lower | regex_search('debian'))
-            ) or
+            (vm_image_publisher | lower in ['canonical', 'debian']) or
+            (vm_image_offer | lower | regex_search('ubuntu|debian')) or
+            (vm_image_publisher == 'unknown' and vm_image_offer == 'unknown') or
             (aadsshlogin_install_on_all_linux | default(false) | bool)
           }}
 
-    - name: Debug | Image decision
-      debug:
+    - name: Debug image support decision
+      ansible.builtin.debug:
         msg:
-          - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
-          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }} SKU={{ vm_image_sku | default('not set') }}"
-          - "Install on this image? {{ aadsshlogin_is_supported_image }}"
-          - "Reason for unsupported image (if applicable): {{ 'Publisher not canonical or debian' if (vm_image_publisher | default('unknown') | lower) not in ['canonical', 'debian'] else 'Offer does not contain ubuntu or debian' if not (vm_image_offer | default('') | lower | regex_search('ubuntu|debian')) else 'Supported' }}"
+          - "VM={{ azure_vm_name }} Is supported? {{ is_supported_image }}"
+          - "Reason if unsupported: {{ 'Publisher not canonical/debian and offer not ubuntu/debian' if not (vm_image_publisher | lower in ['canonical', 'debian'] or vm_image_offer | lower | regex_search('ubuntu|debian')) else 'Supported or metadata missing' }}"
       when: aadsshlogin_debug | default(true) | bool
 
-    # ---- Query existing VM extensions ----
     - name: Query existing AAD SSH extension
       azure.azcollection.azure_rm_virtualmachineextension_info:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
         name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
-        subscription_id: "{{ _azure_sub }}"
-        client_id:       "{{ _azure_client }}"
-        secret:          "{{ _azure_secret }}"
-        tenant:          "{{ _azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
       register: extension_info
       no_log: true
       retries: 3
       delay: 10
 
-    - name: Debug | Raw extension info
-      debug:
+    - name: Debug extension info
+      ansible.builtin.debug:
         msg: "Extensions found: {{ extension_info.extensions | map(attribute='name') | list | default('No extensions found') }}"
       when: aadsshlogin_debug | default(true) | bool
 
-    - name: Compute presence flag
-      set_fact:
-        aadsshlogin_present: >-
-          {{ (extension_info.extensions
-               | selectattr('name','equalto', (aadsshlogin_extension_name | default('AADSSHLogin')))
-               | list | length) > 0 }}
+    - name: Set extension presence
+      ansible.builtin.set_fact:
+        aadsshlogin_present: "{{ (extension_info.extensions | selectattr('name', 'equalto', aadsshlogin_extension_name | default('AADSSHLogin')) | list | length) > 0 }}"
 
-    - name: Debug | Current extension presence
-      debug:
+    - name: Debug extension presence
+      ansible.builtin.debug:
         msg: "AADSSHLogin present? {{ aadsshlogin_present }}"
       when: aadsshlogin_debug | default(true) | bool
 
-    # ---- Install when applicable and not present ----
-    - name: Ensure AAD SSH Login extension is present
+    - name: Install AAD SSH Login extension
       when:
         - not aadsshlogin_present
-        - aadsshlogin_is_supported_image
+        - is_supported_image
       azure.azcollection.azure_rm_virtualmachineextension:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
@@ -170,61 +127,22 @@
         type_handler_version: "1.0"
         auto_upgrade_minor_version: true
         state: present
-        subscription_id: "{{ _azure_sub }}"
-        client_id:       "{{ _azure_client }}"
-        secret:          "{{ _azure_secret }}"
-        tenant:          "{{ _azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
       register: extension_install
       no_log: true
       retries: 3
       delay: 10
 
-    # ---- Optional verification ----
-    - name: Re-query extension after install
-      when:
-        - aadsshlogin_verify | default(true) | bool
-        - extension_install is defined and extension_install.changed
-      azure.azcollection.azure_rm_virtualmachineextension_info:
-        resource_group: "{{ azure_rg }}"
-        virtual_machine_name: "{{ azure_vm_name }}"
-        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
-        subscription_id: "{{ _azure_sub }}"
-        client_id:       "{{ _azure_client }}"
-        secret:          "{{ _azure_secret }}"
-        tenant:          "{{ _azure_tenant }}"
-      register: extension_verify
-      no_log: true
-      retries: 3
-      delay: 10
-
-    - name: Assert extension present after install
-      when:
-        - aadsshlogin_verify | default(true) | bool
-        - extension_install is defined and extension_install.changed
-      assert:
-        that:
-          - (extension_verify.extensions
-             | selectattr('name','equalto', (aadsshlogin_extension_name | default('AADSSHLogin')))
-             | list | length) > 0
-        fail_msg: >
-          AAD SSH Login extension not found after install attempt on {{ azure_vm_name }} in {{ azure_rg }}.
-
-    - name: Debug | Verification extension info
-      debug:
-        msg: "Verification extensions found: {{ extension_verify.extensions | map(attribute='name') | list | default('No extensions (extension_verify undefined)') }}"
-      when:
-        - aadsshlogin_debug | default(true) | bool
-        - extension_verify is defined and extension_verify.extensions is defined
-      no_log: false
-
-    # ---- Install client-side package on supported VMs ----
-    - name: Install aadsshloginforlinux package on the VM
+    - name: Install client-side aadsshloginforlinux package
       ansible.builtin.apt:
         name: aadsshloginforlinux
         state: present
         update_cache: true
       when:
-        - aadsshlogin_is_supported_image
+        - is_supported_image
         - aadsshlogin_present or (extension_install is defined and extension_install.changed)
       delegate_to: "{{ inventory_hostname }}"
       become: true
@@ -234,10 +152,9 @@
     ansible_connection: local
   become: false
   environment:
-    # Provide both sets of names so either the collection or SDK paths are satisfied.
-    AZURE_SUBSCRIPTION_ID: "{{ _azure_sub | default(lookup('env','AZURE_SUBSCRIPTION_ID')) }}"
-    AZURE_CLIENT_ID:       "{{ _azure_client | default(lookup('env','AZURE_CLIENT_ID')) }}"
-    AZURE_SECRET:          "{{ _azure_secret | default(lookup('env','AZURE_SECRET') or lookup('env','AZURE_CLIENT_SECRET')) }}"
-    AZURE_TENANT:          "{{ _azure_tenant | default(lookup('env','AZURE_TENANT') or lookup('env','AZURE_TENANT_ID')) }}"
-    AZURE_CLIENT_SECRET:   "{{ _azure_secret | default(lookup('env','AZURE_CLIENT_SECRET') or lookup('env','AZURE_SECRET')) }}"
-    AZURE_TENANT_ID:       "{{ _azure_tenant | default(lookup('env','AZURE_TENANT_ID') or lookup('env','AZURE_TENANT')) }}"
+    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
+    AZURE_CLIENT_ID: "{{ azure_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
+    AZURE_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
+    AZURE_TENANT: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
+    AZURE_CLIENT_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(lookup('env', 'AZURE_SECRET'))) }}"
+    AZURE_TENANT_ID: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT_ID') | default(lookup('env', 'AZURE_TENANT'))) }}"
