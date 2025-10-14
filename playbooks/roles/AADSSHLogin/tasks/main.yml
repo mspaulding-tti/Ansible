@@ -217,11 +217,11 @@
 
     - name: Debug | Verification extension info
       debug:
-        msg: "Verification extensions found: {{ extension_verify.extensions | map(attribute='name') | list }}"
+        msg: "Verification extensions found: {{ extension_verify.extensions | map(attribute='name') | list | default('No extensions (extension_verify undefined)') }}"
       when:
         - aadsshlogin_debug | default(true) | bool
         - extension_verify is defined
-      no_log: true
+      no_log: false  # Allow debug output to be visible
 
     # ---- Install client-side package on supported VMs ----
     - name: Install aadsshloginforlinux package on the VM
