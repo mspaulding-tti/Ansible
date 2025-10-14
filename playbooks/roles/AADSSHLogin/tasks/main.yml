@@ -67,9 +67,8 @@
           via role vars (aadsshlogin_*) or environment vars
           (AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID, AZURE_SECRET/AZURE_CLIENT_SECRET, AZURE_TENANT/AZURE_TENANT_ID).
 
-    # ---- Lookup VM details when location isn't already known ----
-    - name: Get VM info when location is missing
-      when: azure_location is not defined
+    # ---- Lookup VM details to retrieve image details ----
+    - name: Get VM info to retrieve image details
       azure.azcollection.azure_rm_virtualmachine_info:
         resource_group: "{{ azure_rg }}"
         name: "{{ azure_vm_name }}"
@@ -83,7 +82,7 @@
       delay: 10
 
     - name: Set location and OS image metadata (publisher/offer)
-      when: azure_location is not defined and (vm_info.vms | length) > 0
+      when: (vm_info.vms | length) > 0
       set_fact:
         azure_location: "{{ (vm_info.vms | first).location }}"
         vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('') }}"
@@ -101,19 +100,32 @@
     - name: Normalize image fields and decide applicability
       set_fact:
         vm_image_publisher_lc: "{{ (vm_image_publisher | default('unknown')) | lower }}"
-        vm_image_offer_lc: "{{ (vm_image_offer | default('')) | lower }}"
+        vm_image_offer_lc: "{{ (vm_image_offer | default('') | lower) }}"
+        vm_image_sku_lc: "{{ (vm_image_sku | default('') | lower) }}"
         aadsshlogin_is_supported_image: >-
           {{
-            ((vm_image_publisher | default('unknown') | lower) in ['canonical', 'debian'])
-            or ('ubuntu' in (vm_image_offer | default('') | lower) or 'debian' in (vm_image_offer | default('') | lower))
-            or (aadsshlogin_install_on_all_linux | default(false) | bool)
+            (
+              (vm_image_publisher | default('unknown') | lower) == 'canonical' and
+              (
+                (vm_image_sku | default('') | lower | regex_search('^(\\d+\\.\\d+)(-.*)?$', '\\1') | float >= 18.04) or
+                (vm_image_sku | default('') | lower | regex_search('^(\\d+_\\d+)(-.*)?$', '\\1') | replace('_', '.') | float >= 18.04)
+              )
+            ) or
+            (
+              (vm_image_publisher | default('unknown') | lower) == 'debian' and
+              (
+                (vm_image_sku | default('') | lower | regex_search('^(\\d+)(-.*)?$', '\\1') | int >= 10) or
+                (vm_image_sku | default('') | lower | regex_search('^(\\d+)(-.*)?$', '\\1') | int >= 10)
+              )
+            ) or
+            (aadsshlogin_install_on_all_linux | default(false) | bool)
           }}
 
     - name: Debug | Image decision
       debug:
         msg:
           - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
-          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }}"
+          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }} SKU={{ vm_image_sku | default('not set') }}"
           - "Install on this image? {{ aadsshlogin_is_supported_image }}"
       when: aadsshlogin_debug | default(true) | bool
 
