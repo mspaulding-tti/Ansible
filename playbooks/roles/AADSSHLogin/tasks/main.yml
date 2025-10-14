@@ -16,7 +16,6 @@
   vars:
     hv: "{{ hostvars[inventory_hostname] }}"
   set_fact:
-    # Prefer explicit fields provided by azure_rm inventory; fall back to parsing the resource ID
     azure_rg: >-
       {{ hv.resource_group
          | default(rid_parts[4] | default(omit), true) }}
@@ -81,7 +80,7 @@
       retries: 3
       delay: 10
 
-    - name: Set location and OS image metadata (publisher/offer)
+    - name: Set location and OS image metadata
       when: (vm_info.vms | length) > 0
       set_fact:
         azure_location: "{{ (vm_info.vms | first).location }}"
@@ -106,17 +105,11 @@
           {{
             (
               (vm_image_publisher | default('unknown') | lower) == 'canonical' and
-              (
-                (vm_image_sku | default('') | lower | regex_search('^(\\d+\\.\\d+)(-.*)?$', '\\1') | float >= 18.04) or
-                (vm_image_sku | default('') | lower | regex_search('^(\\d+_\\d+)(-.*)?$', '\\1') | replace('_', '.') | float >= 18.04)
-              )
+              (vm_image_offer | default('') | lower | regex_search('ubuntu'))
             ) or
             (
               (vm_image_publisher | default('unknown') | lower) == 'debian' and
-              (
-                (vm_image_sku | default('') | lower | regex_search('^(\\d+)(-.*)?$', '\\1') | int >= 10) or
-                (vm_image_sku | default('') | lower | regex_search('^(\\d+)(-.*)?$', '\\1') | int >= 10)
-              )
+              (vm_image_offer | default('') | lower | regex_search('debian'))
             ) or
             (aadsshlogin_install_on_all_linux | default(false) | bool)
           }}
@@ -127,6 +120,7 @@
           - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
           - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }} SKU={{ vm_image_sku | default('not set') }}"
           - "Install on this image? {{ aadsshlogin_is_supported_image }}"
+          - "Reason for unsupported image (if applicable): {{ 'Publisher not canonical or debian' if (vm_image_publisher | default('unknown') | lower) not in ['canonical', 'debian'] else 'Offer does not contain ubuntu or debian' if not (vm_image_offer | default('') | lower | regex_search('ubuntu|debian')) else 'Supported' }}"
       when: aadsshlogin_debug | default(true) | bool
 
     # ---- Query existing VM extensions ----
@@ -146,7 +140,7 @@
 
     - name: Debug | Raw extension info
       debug:
-        msg: "Extensions found: {{ extension_info.extensions | map(attribute='name') | list }}"
+        msg: "Extensions found: {{ extension_info.extensions | map(attribute='name') | list | default('No extensions found') }}"
       when: aadsshlogin_debug | default(true) | bool
 
     - name: Compute presence flag
@@ -220,8 +214,8 @@
         msg: "Verification extensions found: {{ extension_verify.extensions | map(attribute='name') | list | default('No extensions (extension_verify undefined)') }}"
       when:
         - aadsshlogin_debug | default(true) | bool
-        - extension_verify is defined
-      no_log: false  # Allow debug output to be visible
+        - extension_verify is defined and extension_verify.extensions is defined
+      no_log: false
 
     # ---- Install client-side package on supported VMs ----
     - name: Install aadsshloginforlinux package on the VM
