@@ -1,7 +1,8 @@
 ---
 # roles/AADSSHLogin/tasks/main.yml
-# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux) and
-# client-side package "aadsshloginforlinux" on Debian and Ubuntu VMs where not already installed.
+# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux) on
+# Debian and Ubuntu VMs where not already installed. The extension handles the
+# client-side package installation.
 
 - name: Validate inventory identifiers
   ansible.builtin.assert:
@@ -9,6 +10,7 @@
       - hostvars[inventory_hostname].resource_group is defined
       - hostvars[inventory_hostname].name is defined or inventory_hostname is defined
     fail_msg: "Missing resource_group or name for {{ inventory_hostname }} in hostvars."
+    quiet: true
 
 - name: Set Azure identifiers
   ansible.builtin.set_fact:
@@ -35,6 +37,7 @@
           Azure credentials missing. Set aadsshlogin_subscription_id, aadsshlogin_client_id,
           aadsshlogin_secret, aadsshlogin_tenant or environment variables
           (AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID, AZURE_SECRET/AZURE_CLIENT_SECRET, AZURE_TENANT/AZURE_TENANT_ID).
+        quiet: true
 
     - name: Get VM image details
       azure.azcollection.azure_rm_virtualmachine_info:
@@ -46,12 +49,13 @@
         tenant: "{{ azure_tenant }}"
       register: vm_info
       no_log: true
-      retries: 3
-      delay: 10
+      retries: 5
+      delay: 15
+      ignore_errors: true
 
     - name: Debug VM info
       ansible.builtin.debug:
-        msg: "VM info: {{ vm_info | to_json | default('No VM info retrieved') }}"
+        msg: "VM info for {{ azure_vm_name }}: {{ vm_info | to_json | default('No VM info retrieved') }}"
       when: aadsshlogin_debug | default(true) | bool
 
     - name: Set image metadata
@@ -68,21 +72,22 @@
           - "Publisher={{ vm_image_publisher }} Offer={{ vm_image_offer }} SKU={{ vm_image_sku }}"
       when: aadsshlogin_debug | default(true) | bool
 
-    - name: Determine if VM is supported (Debian or Ubuntu)
+    - name: Determine if VM is supported
       ansible.builtin.set_fact:
         is_supported_image: >-
           {{
-            (vm_image_publisher | lower in ['canonical', 'debian']) or
-            (vm_image_offer | lower | regex_search('ubuntu|debian')) or
-            (vm_image_publisher == 'unknown' and vm_image_offer == 'unknown') or
-            (aadsshlogin_install_on_all_linux | default(false) | bool)
+            (vm_image_publisher | lower in ['canonical', 'debian'] or
+             vm_image_offer | lower | regex_search('ubuntu|debian') or
+             vm_image_publisher == 'unknown' or
+             aadsshlogin_install_on_all_linux | default(false) | bool)
+            and not (vm_image_publisher | lower in ['redhat', 'centos', 'suse'])
           }}
 
     - name: Debug image support decision
       ansible.builtin.debug:
         msg:
           - "VM={{ azure_vm_name }} Is supported? {{ is_supported_image }}"
-          - "Reason if unsupported: {{ 'Publisher not canonical/debian and offer not ubuntu/debian' if not (vm_image_publisher | lower in ['canonical', 'debian'] or vm_image_offer | lower | regex_search('ubuntu|debian')) else 'Supported or metadata missing' }}"
+          - "Reason if unsupported: {{ 'Publisher is unsupported (e.g., redhat, centos, suse)' if (vm_image_publisher | lower in ['redhat', 'centos', 'suse']) else 'Supported or metadata missing' }}"
       when: aadsshlogin_debug | default(true) | bool
 
     - name: Query existing AAD SSH extension
@@ -96,8 +101,9 @@
         tenant: "{{ azure_tenant }}"
       register: extension_info
       no_log: true
-      retries: 3
-      delay: 10
+      retries: 5
+      delay: 15
+      ignore_errors: true
 
     - name: Debug extension info
       ansible.builtin.debug:
@@ -106,7 +112,7 @@
 
     - name: Set extension presence
       ansible.builtin.set_fact:
-        aadsshlogin_present: "{{ (extension_info.extensions | selectattr('name', 'equalto', aadsshlogin_extension_name | default('AADSSHLogin')) | list | length) > 0 }}"
+        aadsshlogin_present: "{{ (extension_info.extensions | selectattr('name', 'equalto', aadsshlogin_extension_name | default('AADSSHLogin')) | list | length) > 0 if extension_info.extensions is defined else false }}"
 
     - name: Debug extension presence
       ansible.builtin.debug:
@@ -132,20 +138,15 @@
         secret: "{{ azure_secret }}"
         tenant: "{{ azure_tenant }}"
       register: extension_install
-      no_log: true
-      retries: 3
-      delay: 10
+      no_log: false  # Allow error visibility
+      retries: 5
+      delay: 15
+      ignore_errors: true
 
-    - name: Install client-side aadsshloginforlinux package
-      ansible.builtin.apt:
-        name: aadsshloginforlinux
-        state: present
-        update_cache: true
-      when:
-        - is_supported_image
-        - aadsshlogin_present or (extension_install is defined and extension_install.changed)
-      delegate_to: "{{ inventory_hostname }}"
-      become: true
+    - name: Debug extension installation
+      ansible.builtin.debug:
+        msg: "Extension installation: {{ 'Success' if extension_install.changed else 'Failed: ' + (extension_install.msg | default('Skipped or already present')) }}"
+      when: aadsshlogin_debug | default(true) | bool
 
   delegate_to: localhost
   vars:
