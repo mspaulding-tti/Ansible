@@ -1,6 +1,6 @@
 ---
 # roles/AADSSHLogin/tasks/main.yml
-# Installs the Azure VM extension "Azure AD based SSH Login" (type: AADSSHLoginForLinux)
+# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux)
 # for Linux VMs, delegated to localhost so Azure SDK imports happen in the EE.
 
 ###############################################################################
@@ -79,6 +79,8 @@
         tenant:          "{{ _azure_tenant }}"
       register: vm_info
       no_log: true
+      retries: 3
+      delay: 10
 
     - name: Set location and OS image metadata (publisher/offer)
       when: azure_location is not defined and (vm_info.vms | length) > 0
@@ -86,6 +88,14 @@
         azure_location: "{{ (vm_info.vms | first).location }}"
         vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('') }}"
         vm_image_offer:     "{{ (vm_info.vms | first).storage_profile.image_reference.offer     | default('') }}"
+        vm_image_sku:       "{{ (vm_info.vms | first).storage_profile.image_reference.sku       | default('') }}"
+
+    - name: Debug | VM image details
+      debug:
+        msg:
+          - "RG={{ azure_rg }} VM={{ azure_vm_name }} LOC={{ azure_location }}"
+          - "Publisher={{ vm_image_publisher | default('not set') }} Offer={{ vm_image_offer | default('not set') }} SKU={{ vm_image_sku | default('not set') }}"
+      when: aadsshlogin_debug | default(true) | bool
 
     # ---- Normalize and decide whether to install on this image ----
     - name: Normalize image fields and decide applicability
@@ -112,13 +122,15 @@
       azure.azcollection.azure_rm_virtualmachineextension_info:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
-        name: "{{ aadsshlogin_extension_name | default('Azure AD based SSH Login') }}"
+        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
         subscription_id: "{{ _azure_sub }}"
         client_id:       "{{ _azure_client }}"
         secret:          "{{ _azure_secret }}"
         tenant:          "{{ _azure_tenant }}"
       register: extension_info
       no_log: true
+      retries: 3
+      delay: 10
 
     - name: Debug | Raw extension info
       debug:
@@ -129,23 +141,23 @@
       set_fact:
         aadsshlogin_present: >-
           {{ (extension_info.extensions
-               | selectattr('name','equalto', (aadsshlogin_extension_name | default('Azure AD based SSH Login')))
+               | selectattr('name','equalto', (aadsshlogin_extension_name | default('AADSSHLogin')))
                | list | length) > 0 }}
 
     - name: Debug | Current extension presence
       debug:
-        msg: "Azure AD based SSH Login present? {{ aadsshlogin_present }}"
+        msg: "AADSSHLogin present? {{ aadsshlogin_present }}"
       when: aadsshlogin_debug | default(true) | bool
 
     # ---- Install when applicable and not present ----
-    - name: Ensure Azure AD based SSH Login extension is present
+    - name: Ensure AAD SSH Login extension is present
       when:
         - not aadsshlogin_present
         - aadsshlogin_is_supported_image
       azure.azcollection.azure_rm_virtualmachineextension:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
-        name: "{{ aadsshlogin_extension_name | default('Azure AD based SSH Login') }}"
+        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
         location: "{{ azure_location }}"
         publisher: "Microsoft.Azure.ActiveDirectory"
         virtual_machine_extension_type: "AADSSHLoginForLinux"
@@ -158,6 +170,8 @@
         tenant:          "{{ _azure_tenant }}"
       register: extension_install
       no_log: true
+      retries: 3
+      delay: 10
 
     # ---- Optional verification ----
     - name: Re-query extension after install
@@ -167,13 +181,15 @@
       azure.azcollection.azure_rm_virtualmachineextension_info:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
-        name: "{{ aadsshlogin_extension_name | default('Azure AD based SSH Login') }}"
+        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
         subscription_id: "{{ _azure_sub }}"
         client_id:       "{{ _azure_client }}"
         secret:          "{{ _azure_secret }}"
         tenant:          "{{ _azure_tenant }}"
       register: extension_verify
       no_log: true
+      retries: 3
+      delay: 10
 
     - name: Assert extension present after install
       when:
@@ -182,7 +198,7 @@
       assert:
         that:
           - (extension_verify.extensions
-             | selectattr('name','equalto', (aadsshlogin_extension_name | default('Azure AD based SSH Login')))
+             | selectattr('name','equalto', (aadsshlogin_extension_name | default('AADSSHLogin')))
              | list | length) > 0
         fail_msg: >
           AAD SSH Login extension not found after install attempt on {{ azure_vm_name }} in {{ azure_rg }}.
@@ -194,6 +210,18 @@
         - aadsshlogin_debug | default(true) | bool
         - extension_verify is defined
       no_log: true
+
+    # ---- Install client-side package on supported VMs ----
+    - name: Install aadsshloginforlinux package on the VM
+      ansible.builtin.apt:
+        name: aadsshloginforlinux
+        state: present
+        update_cache: true
+      when:
+        - aadsshlogin_is_supported_image
+        - aadsshlogin_present or (extension_install is defined and extension_install.changed)
+      delegate_to: "{{ inventory_hostname }}"
+      become: true
 
   delegate_to: localhost
   vars:
