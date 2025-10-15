@@ -85,8 +85,7 @@
         client_id: "{{ azure_client_id }}"
         secret: "{{ azure_secret }}"
         tenant: "{{ azure_tenant }}"
-        identity:
-          type: SystemAssigned
+        vm_identity: SystemAssigned
         state: present
       when:
         - vm_info.vms | length > 0
