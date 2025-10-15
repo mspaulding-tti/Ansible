@@ -21,23 +21,32 @@
 - block:
     - name: Resolve Azure credentials
       ansible.builtin.set_fact:
-        azure_subscription_id: "{{ aadsshlogin_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
-        azure_client_id: "{{ aadsshlogin_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
-        azure_secret: "{{ aadsshlogin_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
-        azure_tenant: "{{ aadsshlogin_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
+        azure_subscription_id: "{{ aadsshlogin_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID') | default('')) }}"
+        azure_client_id: "{{ aadsshlogin_client_id | default(lookup('env', 'AZURE_CLIENT_ID') | default('')) }}"
+        azure_secret: "{{ aadsshlogin_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(''))) }}"
+        azure_tenant: "{{ aadsshlogin_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID') | default(''))) }}"
+
+    - name: Debug Azure credentials
+      ansible.builtin.debug:
+        msg: "azure_subscription_id: {{ azure_subscription_id | default('undefined') }}, azure_client_id: {{ azure_client_id | default('undefined') }}, azure_tenant: {{ azure_tenant | default('undefined') }}"
+      when: aadsshlogin_debug | default(true) | bool
 
     - name: Ensure Azure credentials are available
       ansible.builtin.assert:
         that:
+          - azure_subscription_id is defined
           - azure_subscription_id | length > 0
+          - azure_client_id is defined
           - azure_client_id | length > 0
+          - azure_secret is defined
           - azure_secret | length > 0
+          - azure_tenant is defined
           - azure_tenant | length > 0
         fail_msg: >
-          Azure credentials missing. Set aadsshlogin_subscription_id, aadsshlogin_client_id,
-          aadsshlogin_secret, aadsshlogin_tenant or environment variables
+          Azure credentials missing. Ensure aadsshlogin_subscription_id, aadsshlogin_client_id,
+          aadsshlogin_secret, aadsshlogin_tenant are set in inventory/vars, or set environment variables
           (AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID, AZURE_SECRET/AZURE_CLIENT_SECRET, AZURE_TENANT/AZURE_TENANT_ID).
-        quiet: true
+        quiet: false
 
     - name: Get VM image details
       azure.azcollection.azure_rm_virtualmachine_info:
@@ -57,6 +66,24 @@
       ansible.builtin.debug:
         msg: "VM info for {{ azure_vm_name }}: {{ vm_info | to_json | default('No VM info retrieved') }}"
       when: aadsshlogin_debug | default(true) | bool
+
+    - name: Check for Managed Identity
+      ansible.builtin.set_fact:
+        has_managed_identity: "{{ (vm_info.vms | first).identity is defined and ((vm_info.vms | first).identity.type is defined and (vm_info.vms | first).identity.type in ['SystemAssigned', 'UserAssigned', 'SystemAssigned,UserAssigned']) if vm_info.vms | length > 0 else false }}"
+      when: vm_info.vms | length > 0
+
+    - name: Debug Managed Identity status
+      ansible.builtin.debug:
+        msg: "VM={{ azure_vm_name }} Has Managed Identity? {{ has_managed_identity | default('false') }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Ensure VM has Managed Identity
+      ansible.builtin.assert:
+        that:
+          - has_managed_identity | default(false)
+        fail_msg: "VM {{ azure_vm_name }} does not have a Managed Identity (SystemAssigned or UserAssigned) enabled, which is required for AADSSHLogin."
+        quiet: false
+      when: vm_info.vms | length > 0
 
     - name: Set image metadata
       ansible.builtin.set_fact:
@@ -123,6 +150,7 @@
       when:
         - not aadsshlogin_present
         - is_supported_image
+        - has_managed_identity | default(false)
       azure.azcollection.azure_rm_virtualmachineextension:
         resource_group: "{{ azure_rg }}"
         virtual_machine_name: "{{ azure_vm_name }}"
@@ -153,9 +181,9 @@
     ansible_connection: local
   become: false
   environment:
-    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
-    AZURE_CLIENT_ID: "{{ azure_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
-    AZURE_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
-    AZURE_TENANT: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
-    AZURE_CLIENT_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(lookup('env', 'AZURE_SECRET'))) }}"
-    AZURE_TENANT_ID: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT_ID') | default(lookup('env', 'AZURE_TENANT'))) }}"
+    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID') | default('')) }}"
+    AZURE_CLIENT_ID: "{{ azure_client_id | default(lookup('env', 'AZURE_CLIENT_ID') | default('')) }}"
+    AZURE_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(''))) }}"
+    AZURE_TENANT: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID') | default(''))) }}"
+    AZURE_CLIENT_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(lookup('env', 'AZURE_SECRET') | default(''))) }}"
+    AZURE_TENANT_ID: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT_ID') | default(lookup('env', 'AZURE_TENANT') | default(''))) }}"
