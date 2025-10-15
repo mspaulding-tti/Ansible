@@ -77,6 +77,58 @@
         msg: "VM={{ azure_vm_name }} Has Managed Identity? {{ has_managed_identity | default('false') }}"
       when: aadsshlogin_debug | default(true) | bool
 
+    - name: Enable System-Assigned Managed Identity
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ azure_rg }}"
+        name: "{{ azure_vm_name }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+        identity:
+          type: SystemAssigned
+        state: present
+      when:
+        - vm_info.vms | length > 0
+        - not has_managed_identity | default(false)
+      register: vm_update
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: Debug Managed Identity enablement
+      ansible.builtin.debug:
+        msg: "Managed Identity enablement for {{ azure_vm_name }}: {{ 'Success' if vm_update.changed else 'Failed or skipped: ' + (vm_update.msg | default('No change needed')) }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Re-fetch VM image details after enabling Managed Identity
+      azure.azcollection.azure_rm_virtualmachine_info:
+        resource_group: "{{ azure_rg }}"
+        name: "{{ azure_vm_name }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+      register: vm_info_updated
+      when:
+        - vm_info.vms | length > 0
+        - vm_update.changed | default(false)
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: Update Managed Identity status
+      ansible.builtin.set_fact:
+        has_managed_identity: "{{ (vm_info_updated.vms | first).identity is defined and ((vm_info_updated.vms | first).identity.type is defined and (vm_info_updated.vms | first).identity.type in ['SystemAssigned', 'UserAssigned', 'SystemAssigned,UserAssigned']) if vm_info_updated.vms | length > 0 else has_managed_identity }}"
+      when:
+        - vm_info.vms | length > 0
+        - vm_update.changed | default(false)
+
+    - name: Debug updated Managed Identity status
+      ansible.builtin.debug:
+        msg: "VM={{ azure_vm_name }} Updated Managed Identity status: {{ has_managed_identity | default('false') }}"
+      when: aadsshlogin_debug | default(true) | bool
+
     - name: Ensure VM has Managed Identity
       ansible.builtin.assert:
         that:
