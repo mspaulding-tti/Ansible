@@ -1,99 +1,161 @@
 ---
-- name: Ensure required packages are installed
-  ansible.builtin.apt:
-    name:
-      - curl
-      - wget
-      - ca-certificates
-    state: present
-    update_cache: yes
-  when: ansible_os_family == "Debian"
+# roles/AADSSHLogin/tasks/main.yml
+# Installs the Azure VM extension "AADSSHLogin" (type: AADSSHLoginForLinux) on
+# Debian and Ubuntu VMs where not already installed. The extension handles the
+# client-side package installation.
 
-- name: Enable System Assigned Managed Identity
-  ansible.builtin.uri:
-    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/identity?api-version=2022-11-01"
-    method: POST
-    headers:
-      Authorization: "Bearer {{ azure_access_token }}"
-      Content-Type: "application/json"
-    body_format: json
-    body:
-      location: "{{ azure_location }}"
-      type: "SystemAssigned"
-    status_code: 200, 201
-  register: identity_result
-  retries: 3
-  delay: 10
-  until: identity_result.status == 200 or identity_result.status == 201
+- name: Validate inventory identifiers
+  ansible.builtin.assert:
+    that:
+      - hostvars[inventory_hostname].resource_group is defined
+      - hostvars[inventory_hostname].name is defined or inventory_hostname is defined
+    fail_msg: "Missing resource_group or name for {{ inventory_hostname }} in hostvars."
+    quiet: true
+
+- name: Set Azure identifiers
+  ansible.builtin.set_fact:
+    azure_rg: "{{ hostvars[inventory_hostname].resource_group }}"
+    azure_vm_name: "{{ hostvars[inventory_hostname].name | default(inventory_hostname) }}"
+    azure_location: "{{ hostvars[inventory_hostname].location | default('unknown') }}"
+
+- block:
+    - name: Resolve Azure credentials
+      ansible.builtin.set_fact:
+        azure_subscription_id: "{{ aadsshlogin_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
+        azure_client_id: "{{ aadsshlogin_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
+        azure_secret: "{{ aadsshlogin_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
+        azure_tenant: "{{ aadsshlogin_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
+
+    - name: Ensure Azure credentials are available
+      ansible.builtin.assert:
+        that:
+          - azure_subscription_id | length > 0
+          - azure_client_id | length > 0
+          - azure_secret | length > 0
+          - azure_tenant | length > 0
+        fail_msg: >
+          Azure credentials missing. Set aadsshlogin_subscription_id, aadsshlogin_client_id,
+          aadsshlogin_secret, aadsshlogin_tenant or environment variables
+          (AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID, AZURE_SECRET/AZURE_CLIENT_SECRET, AZURE_TENANT/AZURE_TENANT_ID).
+        quiet: true
+
+    - name: Get VM image details
+      azure.azcollection.azure_rm_virtualmachine_info:
+        resource_group: "{{ azure_rg }}"
+        name: "{{ azure_vm_name }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+      register: vm_info
+      no_log: true
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: Debug VM info
+      ansible.builtin.debug:
+        msg: "VM info for {{ azure_vm_name }}: {{ vm_info | to_json | default('No VM info retrieved') }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Set image metadata
+      ansible.builtin.set_fact:
+        vm_image_publisher: "{{ (vm_info.vms | first).storage_profile.image_reference.publisher | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        vm_image_offer: "{{ (vm_info.vms | first).storage_profile.image_reference.offer | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        vm_image_sku: "{{ (vm_info.vms | first).storage_profile.image_reference.sku | default('unknown') if vm_info.vms | length > 0 else 'unknown' }}"
+        azure_location: "{{ (vm_info.vms | first).location | default(azure_location) if vm_info.vms | length > 0 else azure_location }}"
+
+    - name: Debug image details
+      ansible.builtin.debug:
+        msg:
+          - "VM={{ azure_vm_name }} RG={{ azure_rg }} Location={{ azure_location }}"
+          - "Publisher={{ vm_image_publisher }} Offer={{ vm_image_offer }} SKU={{ vm_image_sku }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Determine if VM is supported
+      ansible.builtin.set_fact:
+        is_supported_image: >-
+          {{
+            (vm_image_publisher | lower in ['canonical', 'debian'] or
+             vm_image_offer | lower | regex_search('ubuntu|debian') or
+             vm_image_publisher == 'unknown' or
+             aadsshlogin_install_on_all_linux | default(false) | bool)
+            and not (vm_image_publisher | lower in ['redhat', 'centos', 'suse'])
+          }}
+
+    - name: Debug image support decision
+      ansible.builtin.debug:
+        msg:
+          - "VM={{ azure_vm_name }} Is supported? {{ is_supported_image }}"
+          - "Reason if unsupported: {{ 'Publisher is unsupported (e.g., redhat, centos, suse)' if (vm_image_publisher | lower in ['redhat', 'centos', 'suse']) else 'Supported or metadata missing' }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Query existing AAD SSH extension
+      azure.azcollection.azure_rm_virtualmachineextension_info:
+        resource_group: "{{ azure_rg }}"
+        virtual_machine_name: "{{ azure_vm_name }}"
+        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+      register: extension_info
+      no_log: true
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: Debug extension info
+      ansible.builtin.debug:
+        msg: "Extensions found: {{ extension_info.extensions | map(attribute='name') | list | default('No extensions found') }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Set extension presence
+      ansible.builtin.set_fact:
+        aadsshlogin_present: "{{ (extension_info.extensions | selectattr('name', 'equalto', aadsshlogin_extension_name | default('AADSSHLogin')) | list | length) > 0 if extension_info.extensions is defined else false }}"
+
+    - name: Debug extension presence
+      ansible.builtin.debug:
+        msg: "AADSSHLogin present? {{ aadsshlogin_present }}"
+      when: aadsshlogin_debug | default(true) | bool
+
+    - name: Install AAD SSH Login extension
+      when:
+        - not aadsshlogin_present
+        - is_supported_image
+      azure.azcollection.azure_rm_virtualmachineextension:
+        resource_group: "{{ azure_rg }}"
+        virtual_machine_name: "{{ azure_vm_name }}"
+        name: "{{ aadsshlogin_extension_name | default('AADSSHLogin') }}"
+        location: "{{ azure_location }}"
+        publisher: "Microsoft.Azure.ActiveDirectory"
+        virtual_machine_extension_type: "AADSSHLoginForLinux"
+        type_handler_version: "1.0"
+        auto_upgrade_minor_version: true
+        state: present
+        subscription_id: "{{ azure_subscription_id }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+      register: extension_install
+      no_log: false  # Allow error visibility
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: Debug extension installation
+      ansible.builtin.debug:
+        msg: "Extension installation: {{ 'Success' if extension_install.changed else 'Failed: ' + (extension_install.msg | default('Skipped or already present')) }}"
+      when: aadsshlogin_debug | default(true) | bool
+
   delegate_to: localhost
-  run_once: false
-  when:
-    - azure_access_token is defined
-    - azure_subscription_id is defined
-    - azure_resource_group is defined
-
-- name: Wait for Managed Identity propagation
-  ansible.builtin.pause:
-    minutes: 3
-  when: identity_result is succeeded
-
-- name: Install AADSSHLoginForLinux extension
-  ansible.builtin.uri:
-    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
-    method: PUT
-    headers:
-      Authorization: "Bearer {{ azure_access_token }}"
-      Content-Type: "application/json"
-    body_format: json
-    body:
-      location: "{{ azure_location }}"
-      properties:
-        publisher: "{{ aadssh_publisher }}"
-        type: "{{ aadssh_extension_name }}"
-        typeHandlerVersion: "{{ aadssh_extension_version }}"
-        autoUpgradeMinorVersion: true
-        settings: {}
-    status_code: 200, 201
-  register: extension_result
-  retries: 5
-  delay: 30
-  until:
-    - extension_result.status == 200 or extension_result.status == 201
-    - extension_result.json.properties.provisioningState == "Succeeded"
-  delegate_to: localhost
-- name: Verify AADSSH extension installation
-  ansible.builtin.uri:
-    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ azure_access_token }}"
-    status_code: 200
-  register: verify_extension
-  delegate_to: localhost
-- name: Display extension status
-  ansible.builtin.debug:
-    msg: "AADSSHLogin extension status: {{ verify_extension.json.properties.provisioningState }}"
-
-- name: Reboot VM to complete AADSSH setup
-  ansible.builtin.reboot:
-    reboot_timeout: 600
-  when:
-    - extension_result is succeeded
-    - verify_extension.json.properties.provisioningState == "Succeeded"
-
-- name: Validate AADSSH configuration
-  ansible.builtin.shell: |
-    sudo systemctl status aad-auth
-    sudo grep -r "AADSSH" /etc/ssh/sshd_config
-    echo "AADSSH config not found"
-  register: aadssh_validation
-  failed_when: false
-  changed_when: false
-  when:
-    - ansible_connection != "local"
-    - inventory_hostname in groups['azure_vms']
-
-- name: Display AADSSH validation results
-  ansible.builtin.debug:
-    var: aadssh_validation.stdout_lines
-  when: aadssh_validation is defined
+  vars:
+    ansible_connection: local
+  become: false
+  environment:
+    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id | default(lookup('env', 'AZURE_SUBSCRIPTION_ID')) }}"
+    AZURE_CLIENT_ID: "{{ azure_client_id | default(lookup('env', 'AZURE_CLIENT_ID')) }}"
+    AZURE_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_SECRET') | default(lookup('env', 'AZURE_CLIENT_SECRET'))) }}"
+    AZURE_TENANT: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT') | default(lookup('env', 'AZURE_TENANT_ID'))) }}"
+    AZURE_CLIENT_SECRET: "{{ azure_secret | default(lookup('env', 'AZURE_CLIENT_SECRET') | default(lookup('env', 'AZURE_SECRET'))) }}"
+    AZURE_TENANT_ID: "{{ azure_tenant | default(lookup('env', 'AZURE_TENANT_ID') | default(lookup('env', 'AZURE_TENANT'))) }}"
