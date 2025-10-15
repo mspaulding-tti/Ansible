@@ -1,123 +1,99 @@
 ---
-- name: Enable Azure AD SSH Login for Linux
-  hosts: "{{ target_hosts | default('azure_vms') }}"
-  become: yes
-  vars:
-    aadssh_extension_name: "AADSSHLoginForLinux"
-    aadssh_publisher: "Microsoft.Azure.ActiveDirectory.AADSSHLoginForLinux"
-    aadssh_extension_version: "1.0"
-    
-  tasks:
-    - name: Ensure required packages are installed
-      ansible.builtin.apt:
-        name:
-          - curl
-          - wget
-          - ca-certificates
-        state: present
-        update_cache: yes
-      when: ansible_os_family == "Debian"
+- name: Ensure required packages are installed
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
 
-    - name: Enable System Assigned Managed Identity
-      ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/identity?api-version=2022-11-01"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ azure_access_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          location: "{{ azure_location }}"
-          type: "SystemAssigned"
-        status_code: 200, 201
-      register: identity_result
-      retries: 3
-      delay: 10
-      until: identity_result.status == 200 or identity_result.status == 201
-      delegate_to: localhost
-      run_once: false
-      vars:
-        azure_access_token: "{{ lookup('env', 'AZURE_ACCESS_TOKEN') }}"
-        azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-        azure_resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') }}"
-        azure_location: "{{ lookup('env', 'AZURE_LOCATION') | default(azure_region) }}"
-      when: 
-        - azure_access_token is defined
-        - azure_subscription_id is defined
-        - azure_resource_group is defined
+- name: Enable System Assigned Managed Identity
+  ansible.builtin.uri:
+    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/identity?api-version=2022-11-01"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ azure_access_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      location: "{{ azure_location }}"
+      type: "SystemAssigned"
+    status_code: 200, 201
+  register: identity_result
+  retries: 3
+  delay: 10
+  until: identity_result.status == 200 or identity_result.status == 201
+  delegate_to: localhost
+  run_once: false
+  when:
+    - azure_access_token is defined
+    - azure_subscription_id is defined
+    - azure_resource_group is defined
 
-    - name: Wait for Managed Identity propagation
-      ansible.builtin.pause:
-        minutes: 3
-      when: identity_result is succeeded
+- name: Wait for Managed Identity propagation
+  ansible.builtin.pause:
+    minutes: 3
+  when: identity_result is succeeded
 
-    - name: Install AADSSHLoginForLinux extension
-      ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
-        method: PUT
-        headers:
-          Authorization: "Bearer {{ azure_access_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          location: "{{ azure_location }}"
-          properties:
-            publisher: "{{ aadssh_publisher }}"
-            type: "{{ aadssh_extension_name }}"
-            typeHandlerVersion: "{{ aadssh_extension_version }}"
-            autoUpgradeMinorVersion: true
-            settings: {}
-        status_code: 200, 201
-      register: extension_result
-      retries: 5
-      delay: 30
-      until: 
-        - extension_result.status == 200 or extension_result.status == 201
-        - extension_result.json.properties.provisioningState == "Succeeded"
-      delegate_to: localhost
-      vars:
-        azure_access_token: "{{ lookup('env', 'AZURE_ACCESS_TOKEN') }}"
-        azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-        azure_resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') }}"
-        azure_location: "{{ lookup('env', 'AZURE_LOCATION') | default(azure_region) }}"
+- name: Install AADSSHLoginForLinux extension
+  ansible.builtin.uri:
+    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ azure_access_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      location: "{{ azure_location }}"
+      properties:
+        publisher: "{{ aadssh_publisher }}"
+        type: "{{ aadssh_extension_name }}"
+        typeHandlerVersion: "{{ aadssh_extension_version }}"
+        autoUpgradeMinorVersion: true
+        settings: {}
+    status_code: 200, 201
+  register: extension_result
+  retries: 5
+  delay: 30
+  until:
+    - extension_result.status == 200 or extension_result.status == 201
+    - extension_result.json.properties.provisioningState == "Succeeded"
+  delegate_to: localhost
+- name: Verify AADSSH extension installation
+  ansible.builtin.uri:
+    url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ azure_access_token }}"
+    status_code: 200
+  register: verify_extension
+  delegate_to: localhost
+- name: Display extension status
+  ansible.builtin.debug:
+    msg: "AADSSHLogin extension status: {{ verify_extension.json.properties.provisioningState }}"
 
-    - name: Verify AADSSH extension installation
-      ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_subscription_id }}/resourceGroups/{{ azure_resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ inventory_hostname }}/extensions/{{ aadssh_extension_name }}?api-version=2022-11-01"
-        method: GET
-        headers:
-          Authorization: "Bearer {{ azure_access_token }}"
-        status_code: 200
-      register: verify_extension
-      delegate_to: localhost
-      vars:
-        azure_access_token: "{{ lookup('env', 'AZURE_ACCESS_TOKEN') }}"
-        azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
-        azure_resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') }}"
+- name: Reboot VM to complete AADSSH setup
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - extension_result is succeeded
+    - verify_extension.json.properties.provisioningState == "Succeeded"
 
-    - name: Display extension status
-      ansible.builtin.debug:
-        msg: "AADSSHLogin extension status: {{ verify_extension.json.properties.provisioningState }}"
+- name: Validate AADSSH configuration
+  ansible.builtin.shell: |
+    sudo systemctl status aad-auth
+    sudo grep -r "AADSSH" /etc/ssh/sshd_config
+    echo "AADSSH config not found"
+  register: aadssh_validation
+  failed_when: false
+  changed_when: false
+  when:
+    - ansible_connection != "local"
+    - inventory_hostname in groups['azure_vms']
 
-    - name: Reboot VM to complete AADSSH setup
-      ansible.builtin.reboot:
-        reboot_timeout: 600
-      when: 
-        - extension_result is succeeded
-        - verify_extension.json.properties.provisioningState == "Succeeded"
-
-    - name: Validate AADSSH configuration
-      ansible.builtin.shell: |
-        sudo systemctl status aad-auth
-        sudo grep -r "AADSSH" /etc/ssh/sshd_config || echo "AADSSH config not found"
-      register: aadssh_validation
-      failed_when: false
-      changed_when: false
-      when: 
-        - ansible_connection != "local"
-        - inventory_hostname in groups['azure_vms']
-
-    - name: Display AADSSH validation results
-      ansible.builtin.debug:
-        var: aadssh_validation.stdout_lines
-      when: aadssh_validation is defined
+- name: Display AADSSH validation results
+  ansible.builtin.debug:
+    var: aadssh_validation.stdout_lines
+  when: aadssh_validation is defined
