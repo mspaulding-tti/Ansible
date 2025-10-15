@@ -2,7 +2,6 @@
 - name: Enable Azure AD SSH Login for Linux
   hosts: "{{ target_hosts | default('azure_vms') }}"
   become: yes
-  gather_facts: yes
   vars:
     aadssh_extension_name: "AADSSHLoginForLinux"
     aadssh_publisher: "Microsoft.Azure.ActiveDirectory.AADSSHLoginForLinux"
