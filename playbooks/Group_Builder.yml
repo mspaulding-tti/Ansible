@@ -1,0 +1,20 @@
+---
+- name: Build inventory groups from in-OS facts
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - name: Group Ubuntu by major version
+      group_by:
+        key: "ubuntu_{{ ansible_distribution_major_version }}"
+      when: ansible_distribution | lower == 'ubuntu'
+
+    - name: Group Debian by major version
+      group_by:
+        key: "debian_{{ ansible_distribution_major_version }}"
+      when: ansible_distribution | lower == 'debian'
+
+    - name: Group RHEL by major version
+      group_by:
+        key: "red_hat_{{ ansible_distribution_major_version }}"
+      when: ansible_os_family | lower == 'redhat'

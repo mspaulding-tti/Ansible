@@ -1,0 +1,96 @@
+---
+- name: Build dynamic groups from in-OS facts
+  hosts: all
+  gather_facts: yes
+
+  vars:
+    # Helper regex to extract the Windows Server marketing year from OS name.
+    # This matches strings like:
+    #   "Microsoft Windows Server 2019 Datacenter"
+    #   "Microsoft Windows Server 2022 Standard"
+    #   "Microsoft Windows Server 2025 Datacenter: Azure Edition"
+    windows_year_pattern: '(?i)windows server\s*(2019|2022|2025)'
+
+  tasks:
+    # --------------------------
+    # Broad OS family rollups
+    # --------------------------
+    - name: Group Linux hosts
+      group_by:
+        key: "linux"
+      when: ansible_os_family is defined and (ansible_os_family | lower) in ['debian', 'redhat', 'suse', 'linux']
+
+    - name: Group Windows hosts
+      group_by:
+        key: "windows"
+      when:
+        - ansible_os_family is defined
+        - (ansible_os_family | lower) == 'windows'
+
+    # --------------------------
+    # Ubuntu by major version
+    # --------------------------
+    - name: Group Ubuntu by major version
+      group_by:
+        key: "ubuntu_{{ ansible_distribution_major_version }}"
+      when:
+        - ansible_distribution is defined
+        - ansible_distribution | lower == 'ubuntu'
+        - ansible_distribution_major_version is defined
+
+    # --------------------------
+    # Debian by major version
+    # --------------------------
+    - name: Group Debian by major version
+      group_by:
+        key: "debian_{{ ansible_distribution_major_version }}"
+      when:
+        - ansible_distribution is defined
+        - ansible_distribution | lower == 'debian'
+        - ansible_distribution_major_version is defined
+
+    # --------------------------
+    # RHEL by major version
+    # --------------------------
+    - name: Group RHEL by major version
+      group_by:
+        key: "red_hat_{{ ansible_distribution_major_version }}"
+      when:
+        - ansible_os_family is defined
+        - ansible_os_family | lower == 'redhat'
+        - ansible_distribution_major_version is defined
+
+    # --------------------------
+    # Windows Server by year (2019/2022/2025)
+    # --------------------------
+    # Extract the Windows Server "year" from the OS name or distribution text.
+    # We prefer ansible_os_name, but fall back to ansible_distribution if needed.
+    - name: Derive Windows Server year from facts
+      vars:
+        windows_os_text: >-
+          {{
+            (ansible_os_name | default('')) ~ ' ' ~ (ansible_distribution | default(''))
+          }}
+        win_year_match: "{{ (windows_os_text | regex_search(windows_year_pattern)) | default('') }}"
+      set_fact:
+        windows_server_year: "{{ (win_year_match | regex_search('(2019|2022|2025)')) | default(omit) }}"
+      when:
+        - ansible_os_family is defined
+        - ansible_os_family | lower == 'windows'
+
+    - name: Group Windows Server by year (2019/2022/2025)
+      group_by:
+        key: "windows_{{ windows_server_year }}"
+      when:
+        - ansible_os_family is defined
+        - ansible_os_family | lower == 'windows'
+        - windows_server_year is defined
+
+    # Optional: group generic Windows Server if year could not be parsed
+    - name: Group generic Windows Server (no year found)
+      group_by:
+        key: "windows_server"
+      when:
+        - ansible_os_family is defined
+        - ansible_os_family | lower == 'windows'
+        - windows_server_year is not defined
