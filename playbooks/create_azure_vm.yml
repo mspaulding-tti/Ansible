@@ -1,0 +1,136 @@
+---
+- name: Create Azure VM based on AAP Survey
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # These variables will be populated by the AAP Survey.
+  # Default values are provided here for local testing.
+  vars:
+    survey_resource_group: "rg-aap-managed-vms"
+    survey_vm_name: "web-server-01"
+    survey_location: "eastus"
+    survey_availability_zone: "1" # 'None' or a zone number like '1', '2', '3'
+    survey_image: "Ubuntu 22.04-LTS"
+    survey_size: "Standard_B1s"
+    admin_ssh_key_public: "ssh-rsa AAAA..." # This should be populated from an AAP Credential
+
+    # A map to translate user-friendly image names to Azure-specific details
+    image_map:
+      "Ubuntu 22.04-LTS":
+        publisher: "Canonical"
+        offer: "0001-com-ubuntu-server-jammy"
+        sku: "22_04-lts-gen2"
+        version: "latest"
+      "RHEL 9.2":
+        publisher: "RedHat"
+        offer: "RHEL"
+        sku: "9_2"
+        version: "latest"
+      "Debian 11":
+        publisher: "Debian"
+        offer: "debian-11"
+        sku: "11-gen2"
+        version: "latest"
+
+  tasks:
+    - name: Ensure Resource Group exists
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ survey_resource_group }}"
+        location: "{{ survey_location }}"
+      register: rg
+
+    - name: Create Virtual Network
+      azure.azcollection.azure_rm_virtualnetwork:
+        resource_group: "{{ survey_resource_group }}"
+        name: "vnet-{{ survey_vm_name }}"
+        address_prefixes: "10.1.0.0/16"
+
+    - name: Add a subnet
+      azure.azcollection.azure_rm_subnet:
+        resource_group: "{{ survey_resource_group }}"
+        name: "subnet-{{ survey_vm_name }}"
+        address_prefix: "10.1.1.0/24"
+        virtual_network: "vnet-{{ survey_vm_name }}"
+
+    - name: Create Public IP address
+      azure.azcollection.azure_rm_publicipaddress:
+        resource_group: "{{ survey_resource_group }}"
+        name: "pip-{{ survey_vm_name }}"
+        allocation_method: Static
+        sku: Standard # Standard SKU is required for zones
+      register: public_ip
+
+    - name: Create Network Interface Card (NIC)
+      azure.azcollection.azure_rm_networkinterface:
+        resource_group: "{{ survey_resource_group }}"
+        name: "nic-{{ survey_vm_name }}"
+        virtual_network: "vnet-{{ survey_vm_name }}"
+        subnet: "subnet-{{ survey_vm_name }}"
+        public_ip_address: "pip-{{ survey_vm_name }}"
+        security_group: "{{ nsg.state.id }}" # Associate NSG
+      register: nic
+
+    - name: Create Network Security Group (NSG) and allow SSH
+      azure.azcollection.azure_rm_securitygroup:
+        resource_group: "{{ survey_resource_group }}"
+        name: "nsg-{{ survey_vm_name }}"
+        rules:
+          - name: SSH
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 1001
+            direction: Inbound
+      register: nsg
+
+    - name: Create the Virtual Machine with specified requirements
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ survey_resource_group }}"
+        name: "{{ survey_vm_name }}"
+        vm_size: "{{ survey_size }}"
+        # Set the availability zone if one was selected
+        zones: "{{ [survey_availability_zone] if survey_availability_zone not in ['None', ''] else omit }}"
+        
+        # --- Identity & Patching Configuration ---
+        identity: SystemAssigned
+        os_profile:
+          computer_name: "{{ survey_vm_name }}"
+          admin_username: "aapuser"
+          linux_configuration:
+            disable_password_authentication: true
+            # Enable Azure-orchestrated patching
+            patch_settings:
+              patch_mode: AutomaticByPlatform
+              assessment_mode: AutomaticByPlatform
+            ssh:
+              public_keys:
+                - path: "/home/aapuser/.ssh/authorized_keys"
+                  key_data: "{{ admin_ssh_key_public }}"
+                  
+        # --- Network & Image Configuration ---
+        network_interfaces: "{{ nic.state.name }}"
+        image: "{{ image_map[survey_image] }}"
+      register: vm_result
+
+    - name: Enable Entra ID (formerly Azure AD) login for the VM
+      # This extension enables SSH login using Entra ID credentials
+      azure.azcollection.azure_rm_virtualmachineextension:
+        name: "AADSSHLoginForLinux"
+        resource_group: "{{ survey_resource_group }}"
+        virtual_machine_name: "{{ survey_vm_name }}"
+        publisher: "Microsoft.Azure.ActiveDirectory"
+        virtual_machine_extension_type: "AADSSHLoginForLinux"
+        type_handler_version: "1.0"
+        auto_upgrade_minor_version: true
+        state: present
+
+    - name: Display VM information
+      ansible.builtin.debug:
+        msg:
+          - "VM '{{ survey_vm_name }}' has been created successfully."
+          - "Resource Group: {{ survey_resource_group }}"
+          - "Public IP Address: {{ public_ip.state.ip_address }}"
+          - "To connect via SSH as the local admin: ssh aapuser@{{ public_ip.state.ip_address }}"
+          - "Entra ID login and System-Assigned Managed Identity are enabled."
+          - "Guest OS patching is set to AutomaticByPlatform."
