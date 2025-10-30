@@ -61,16 +61,6 @@
         sku: Standard # Standard SKU is required for zones
       register: public_ip
 
-    - name: Create Network Interface Card (NIC)
-      azure.azcollection.azure_rm_networkinterface:
-        resource_group: "{{ survey_resource_group }}"
-        name: "nic-{{ survey_vm_name }}"
-        virtual_network: "vnet-{{ survey_vm_name }}"
-        subnet: "subnet-{{ survey_vm_name }}"
-        public_ip_address: "pip-{{ survey_vm_name }}"
-        security_group: "{{ nsg.state.id }}" # Associate NSG
-      register: nic
-
     - name: Create Network Security Group (NSG) and allow SSH
       azure.azcollection.azure_rm_securitygroup:
         resource_group: "{{ survey_resource_group }}"
@@ -83,6 +73,16 @@
             priority: 1001
             direction: Inbound
       register: nsg
+
+    - name: Create Network Interface Card (NIC)
+      azure.azcollection.azure_rm_networkinterface:
+        resource_group: "{{ survey_resource_group }}"
+        name: "nic-{{ survey_vm_name }}"
+        virtual_network: "vnet-{{ survey_vm_name }}"
+        subnet: "subnet-{{ survey_vm_name }}"
+        public_ip_address: "pip-{{ survey_vm_name }}"
+        security_group: "{{ nsg.state.id }}" # Associate NSG
+      register: nic
 
     - name: Create the Virtual Machine with specified requirements
       azure.azcollection.azure_rm_virtualmachine:
