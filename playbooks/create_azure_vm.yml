@@ -118,9 +118,6 @@
         # Linux-specific options, including Azure-orchestrated patching
         linux_config:
           disable_password_authentication: true
-          patch_settings:
-            patch_mode: AutomaticByPlatform
-            assessment_mode: AutomaticByPlatform
 
         # --- Networking ---
         # Your previous NIC register is `nic`. The VM module expects names as a list.
