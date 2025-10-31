@@ -93,7 +93,7 @@
             primary: true
       register: nic
 
-      - name: Create the Virtual Machine with specified requirements
+    - name: Create the Virtual Machine with specified requirements
       azure.azcollection.azure_rm_virtualmachine:
         resource_group: "{{ survey_resource_group }}"
         name: "{{ survey_vm_name }}"
