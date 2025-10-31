@@ -1,0 +1,204 @@
+---
+- name: Build dynamic survey choices for Azure VM provisioning
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # ---- Azure auth (use env vars in AAP credentials where possible) ----
+    azure_tenant: "{{ lookup('env','AZURE_TENANT_ID') }}"
+    azure_client: "{{ lookup('env','AZURE_CLIENT_ID') }}"
+    azure_secret: "{{ lookup('env','AZURE_CLIENT_SECRET') }}"
+    azure_subscription_filter: ""         # leave blank to list all; or set to a specific subscription ID
+    target_region: "eastus"               # region to query VM sizes/prices for
+    currency_code: "USD"                  # Retail Prices API currency
+    # ---- Controller connection ----
+    controller_host: "https://aap-controller.example.org"
+    controller_oauthtoken: "{{ lookup('env','CONTROLLER_OAUTH_TOKEN') }}"
+    target_job_template: "AZURE - Provision VM"   # the JT whose survey we will update
+    include_prices: true                  # set false to skip pricing calls
+    # keep list short initially; expand later
+    vm_size_allowlist: []                 # e.g. ["Standard_D2s_v5","Standard_B2ms"]
+
+  collections:
+    - azure.azcollection
+    - awx.awx
+
+  tasks:
+    - name: Get subscriptions (all that the SP can see)
+      azure.azcollection.azure_rm_subscription_info:
+        all: true
+        client_id: "{{ azure_client }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+      register: subs
+      # Lists subscriptions (enabled by default). [1](https://docs.ansible.com/ansible/latest/collections/azure/azcollection/azure_rm_subscription_info_module.html)
+    - name: Build subscription choices (Label | value)
+      set_fact:
+        sub_choices_list: >-
+          {{
+            subs.subscriptions
+            | map(attribute='display_name')
+            | zip(subs.subscriptions | map(attribute='subscription_id'))
+            | map('join',' | ')
+            | list
+          }}
+
+    - name: Pick a subscription id to enumerate resource groups
+      set_fact:
+        chosen_subscription_id: >-
+          {{
+            (azure_subscription_filter | length > 0)
+            | ternary(azure_subscription_filter, subs.subscriptions[0].subscription_id)
+          }}
+
+    - name: Get resource groups for chosen subscription
+      azure.azcollection.azure_rm_resourcegroup_info:
+        client_id: "{{ azure_client }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ chosen_subscription_id }}"
+      register: rgs
+      # Returns all RGs in that subscription. [2](https://docs.ansible.com/ansible/latest/collections/azure/azcollection/azure_rm_resourcegroup_info_module.html)
+
+    - name: Build RG choices (Label | value)
+      set_fact:
+        rg_choices_list: >-
+          {{
+            rgs.resourcegroups
+            | map(attribute='name')
+            | map('regex_replace','^(.*)$','\\1 | \\1')
+            | list
+          }}
+
+    - name: Get VM sizes for region
+      azure.azcollection.azure_rm_virtualmachinesize_info:
+        location: "{{ target_region }}"
+        client_id: "{{ azure_client }}"
+        secret: "{{ azure_secret }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ chosen_subscription_id }}"
+      register: sizes
+      # Provides VM size metadata (cores, RAM, etc.) in the region. [3](https://docs.ansible.com/ansible/latest/collections/azure/azcollection/azure_rm_virtualmachinesize_info_module.html)
+    - name: Filter/normalize VM sizes list
+      set_fact:
+        vm_sizes_filtered: >-
+          {{
+            (vm_size_allowlist | length > 0)
+            | ternary(
+                sizes.sizes | selectattr('name','in', vm_size_allowlist) | list,
+                sizes.sizes
+              )
+          }}
+
+    - name: (Optional) Build simple map of retail prices per VM size for region
+      when: include_prices
+      vars:
+        prices_base: "https://prices.azure.com/api/retail/prices"
+      loop: "{{ vm_sizes_filtered | map(attribute='name') | list }}"
+      loop_control:
+        loop_var: vm_sku
+      uri:
+        url: >-
+          {{ prices_base }}?$filter=
+          serviceName eq 'Virtual Machines'
+          and armRegionName eq '{{ target_region }}'
+          and armSkuName eq '{{ vm_sku }}'
+          and type eq 'Consumption'
+        method: GET
+        return_content: yes
+      register: price_queries
+      # Public Retail Prices API, case-sensitive filters. Returns Items[] and NextPageLink. [4](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices)
+    - name: Assemble {sku: price} map (USD hourly)
+      when: include_prices
+      set_fact:
+        vm_price_map: >-
+          {{
+            dict(
+              price_queries.results
+              | map(attribute='json')
+              | map(attribute='Items')
+              | map('first')
+              | select('truthy')
+              | map(attribute='armSkuName')
+              | list
+              |
+              zip(
+                price_queries.results
+                | map(attribute='json')
+                | map(attribute='Items')
+                | map('first')
+                | select('truthy')
+                | map(attribute='unitPrice')
+                | list
+              )
+            )
+          }}
+
+    - name: Build VM size choices (include cores/RAM and price if available)
+      set_fact:
+        vm_choices_list: >-
+          {{
+            vm_sizes_filtered
+            | map('combine', {'price': (vm_price_map[item.name] | default(None))})
+            | map('extract', attribute=None)  # no-op; keeps list
+            | map('community.general.dict_kv', 'name')
+            | list
+          }}
+      vars:
+        # helper filter to format label
+        _dummy: ""
+      # We'll format label below using a template task.
+
+    - name: Format VM size labels with optional price
+      set_fact:
+        vm_choices_pretty: >-
+          {% set out=[] %}
+          {% for s in vm_sizes_filtered %}
+          {%   set p = (vm_price_map[s.name] if vm_price_map is defined else None) %}
+          {%   set label = s.name ~ " (" ~ s.numberOfCores ~ " vCPU, " ~ (s.memoryInMB//1024) ~ " GiB)" %}
+          {%   if p is not none %}{% set label = label ~ " — $" ~ ('%.4f'|format(p)) ~ "/hr" %}{% endif %}
+          {%   do out.append(label ~ " | " ~ s.name) %}
+          {% endfor %}
+          {{ out }}
+
+    - name: Prepare Survey spec JSON
+      set_fact:
+        survey_spec:
+          name: "Azure VM Build Survey"
+          description: "Auto-generated choices from Azure"
+          spec:
+            - question_name: "Subscription"
+              question_description: "Choose the Azure subscription"
+              required: true
+              type: "multiplechoice"
+              variable: "azure_subscription_id"
+              choices: "{{ sub_choices_list | join('\n') }}"
+              default: "{{ chosen_subscription_id }}"
+            - question_name: "Resource Group"
+              question_description: "Choose an existing RG"
+              required: true
+              type: "multiplechoice"
+              variable: "azure_resource_group"
+              choices: "{{ rg_choices_list | join('\n') }}"
+            - question_name: "Region"
+              question_description: "Azure region whose sizes were queried"
+              required: true
+              type: "text"
+              variable: "azure_region"
+              default: "{{ target_region }}"
+            - question_name: "VM Size"
+              question_description: "Available VM sizes in {{ target_region }}"
+              required: true
+              type: "multiplechoice"
+              variable: "azure_vm_size"
+              choices: "{{ vm_choices_pretty | join('\n') }}"
+
+    - name: Update Job Template survey with fresh choices
+      awx.awx.job_template:
+        controller_host: "{{ controller_host }}"
+        controller_oauthtoken: "{{ controller_oauthtoken }}"
+        name: "{{ target_job_template }}"
+        survey_enabled: true
+        survey_spec: "{{ survey_spec | to_json }}"
+        validate_certs: true
+        state: present
+      # The job_template module accepts survey_spec; JSON schema matches the /survey_spec API. [5](https://docs.ansible.com/ansible/latest/collections/awx/awx/job_template_module.html)[6](https://github.com/ansible/awx/blob/devel/awx/api/templates/api/job_template_survey_spec.md)
