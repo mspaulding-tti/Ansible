@@ -78,10 +78,14 @@
       azure.azcollection.azure_rm_networkinterface:
         resource_group: "{{ survey_resource_group }}"
         name: "nic-{{ survey_vm_name }}"
-        virtual_network: "vnet-{{ survey_vm_name }}"
-        subnet: "subnet-{{ survey_vm_name }}"
-        public_ip_address: "pip-{{ survey_vm_name }}"
-        security_group: "{{ nsg.state.id }}" # Associate NSG
+        security_group: "{{ nsg.state.id | default('nsg-' ~ survey_vm_name) }}"
+        ip_configurations:
+          - name: ipconfig1
+            virtual_network: "vnet-{{ survey_vm_name }}"
+            subnet_name: "subnet-{{ survey_vm_name }}"
+            # Use the PIP name if it's in the same RG,
+            # or use the ID for cross-RG robustness:
+            public_ip_address: "{{ public_ip.state.id | default('pip-' ~ survey_vm_name) }}"
       register: nic
 
     - name: Create the Virtual Machine with specified requirements
