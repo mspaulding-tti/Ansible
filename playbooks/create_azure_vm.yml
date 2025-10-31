@@ -93,33 +93,50 @@
             primary: true
       register: nic
 
-    - name: Create the Virtual Machine with specified requirements
+      - name: Create the Virtual Machine with specified requirements
       azure.azcollection.azure_rm_virtualmachine:
         resource_group: "{{ survey_resource_group }}"
         name: "{{ survey_vm_name }}"
         vm_size: "{{ survey_size }}"
-        # Set the availability zone if one was selected
+
+        # Availability zones: module expects a list (strings). Your Jinja expression is fine.
         zones: "{{ [survey_availability_zone] if survey_availability_zone not in ['None', ''] else omit }}"
-        
-        # --- Identity & Patching Configuration ---
-        identity: SystemAssigned
-        os_profile:
-          computer_name: "{{ survey_vm_name }}"
-          admin_username: "aapuser"
-          linux_configuration:
-            disable_password_authentication: true
-            # Enable Azure-orchestrated patching
-            patch_settings:
-              patch_mode: AutomaticByPlatform
-              assessment_mode: AutomaticByPlatform
-            ssh:
-              public_keys:
-                - path: "/home/aapuser/.ssh/authorized_keys"
-                  key_data: "{{ admin_ssh_key_public }}"
-                  
-        # --- Network & Image Configuration ---
-        network_interfaces: "{{ nic.state.name }}"
+
+        # --- Identity ---
+        vm_identity:
+          type: SystemAssigned
+
+        # --- OS & Access (Linux) ---
+        os_type: Linux
+        admin_username: "aapuser"
+
+        # SSH key goes here at top level (not under os_profile)
+        ssh_public_keys:
+          - path: "/home/aapuser/.ssh/authorized_keys"
+            key_data: "{{ admin_ssh_key_public }}"
+
+        # Linux-specific options, including Azure-orchestrated patching
+        linux_config:
+          disable_password_authentication: true
+          patch_settings:
+            patch_mode: AutomaticByPlatform
+            assessment_mode: AutomaticByPlatform
+
+        # --- Networking ---
+        # Your previous NIC register is `nic`. The VM module expects names as a list.
+        network_interface_names:
+          - "{{ nic.state.name | default('nic-' ~ survey_vm_name) }}"
+
+        # --- Image ---
+        # Your image_map[survey_image] should be a dict with publisher/offer/sku/version or an image reference object.
         image: "{{ image_map[survey_image] }}"
+
+        # Optional disk defaults; adjust if you have different requirements
+        managed_disk_type: StandardSSD_LRS
+        os_disk_size_gb: 64
+        os_disk_caching: ReadWrite
+        
+        state: present
       register: vm_result
 
     - name: Enable Entra ID (formerly Azure AD) login for the VM
